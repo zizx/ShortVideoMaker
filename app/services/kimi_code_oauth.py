@@ -70,24 +70,27 @@ _K_USER_CODE = "kimi_code_last_user_code"  # diagnostics only
 # a token that dies mid-flight.
 _EXPIRY_MARGIN_SECONDS = 60.0
 
-# Kimi 会轮换 refresh token，同一个旧 token 只能成功续期一次。并发请求必须
-# 串行续期，否则第二个线程会拿着已轮换的旧 token 得到 invalid_grant。
+# Kimi rotates refresh tokens, so an old token can renew only once. Concurrent
+# requests must renew serially, or the second thread uses the rotated token and
+# gets invalid_grant.
 _refresh_lock = threading.Lock()
-# 网络请求不持有凭据锁；验证响应归属和写回必须在同一个临界区完成。
+# Network calls never hold the credentials lock; validating response ownership
+# and writing credentials must happen in the same critical section.
 _credentials_lock = threading.RLock()
 _authorization_generation = 0
 
 
 def authorization_generation() -> int:
-    """返回登录／断开版本，供在途授权响应检查是否仍属于当前账号状态。"""
+    """Return the login/disconnect generation so in-flight auth responses can verify state."""
     with _credentials_lock:
         return _authorization_generation
 
 
 def _cfg(key, default=""):
-    # 读路径必须合并排队中的非阻塞更新：视频任务持有配置锁期间，_set 的写入
-    # 只进入队列，直接读 config.app 会看不到刚完成的登录或 refresh 结果，
-    # 导致已授权被误判为未授权、或用已轮换的旧 refresh token 重复续期。
+    # Read paths must merge queued non-blocking updates: while a video task holds
+    # the config lock, _set writes only queue up, so reading config.app directly
+    # misses completed login or refresh results and can misreport authorization
+    # or renew again with an old rotated refresh token.
     snapshot = config.snapshot_config_with_pending(config.app)
     value = snapshot.get(key, default)
     return value if value is not None else default
@@ -133,8 +136,8 @@ def site_base_url(region: str) -> str:
 
 
 def _identity_headers() -> dict:
-    # 真实身份（对齐 Kimi 第三方指引与 CLIProxyAPI 的生产实践）：platform 与
-    # 版本都是 MoneyPrinterTurbo 自己的，不伪装成 kimi_code_cli。
+    # Real identity, aligned with Kimi's third-party guide and CLIProxyAPI in
+    # production: platform and version are MoneyPrinterTurbo's own, not kimi_code_cli.
     return {
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept": "application/json",
@@ -260,7 +263,7 @@ def store_token_bundle(
     expected_generation: int | None = None,
     expected_refresh_token: str | None = None,
 ) -> None:
-    """原子检查响应归属并保存凭据，避免旧响应恢复断开或覆盖新登录。"""
+    """Atomically validate response ownership and save credentials, rejecting stale responses."""
     global _authorization_generation
     access = payload["access_token"]
     expires_at = time.time() + float(payload.get("expires_in") or 900)
@@ -283,7 +286,8 @@ def store_token_bundle(
         _set(_K_EXPIRES_AT, expires_at)
         if expected_refresh_token is None:
             _authorization_generation += 1
-        # 保存不等待视频任务的配置锁，队列中的凭据仍可立即读取。
+        # Saving does not wait for the video task's config lock; queued credentials
+        # remain immediately readable.
         config.try_save_config()
 
 
@@ -309,14 +313,15 @@ def authorized_region() -> str:
 
 
 def get_valid_access_token() -> str:
-    """返回有效 token；串行续期，并拒绝在登录／断开之后返回的旧响应。"""
+    """Return a valid token; serialize refresh and reject stale post-login responses."""
     with _credentials_lock:
         access = str(_cfg(_K_ACCESS, "")).strip()
         expires_at = float(_cfg(_K_EXPIRES_AT, 0) or 0)
         if access and time.time() < expires_at - _EXPIRY_MARGIN_SECONDS:
             return access
     with _refresh_lock:
-        # 排队期间可能已有请求续期，因此重新读取完整凭据状态。
+        # Another request may have refreshed while this thread waited, so reread
+        # the full credential state.
         with _credentials_lock:
             access = str(_cfg(_K_ACCESS, "")).strip()
             expires_at = float(_cfg(_K_EXPIRES_AT, 0) or 0)

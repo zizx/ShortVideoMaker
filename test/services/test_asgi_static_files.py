@@ -12,7 +12,8 @@ from app.utils import utils
 class TestTaskStaticFiles(unittest.TestCase):
     def setUp(self):
         self.original_app_config = dict(config.app)
-        # 普通静态文件测试验证默认开放模式，不能依赖开发者本机是否启用了 Key。
+        # Regular static file tests verify the default open mode and must not
+        # depend on whether the developer enabled an API key locally.
         config.app["api_key"] = ""
         self.client = TestClient(asgi.app)
 
@@ -34,7 +35,8 @@ class TestTaskStaticFiles(unittest.TestCase):
         self.assertEqual(response.text, "task artifact")
 
     def test_configured_key_protects_task_file(self):
-        """配置 Key 后，任务文件必须拒绝缺失或错误凭据，只接受正确请求头。"""
+        """Once a key is configured, task files must reject missing or wrong
+        credentials and accept only the correct header."""
 
         config.app["api_key"] = "task-file-secret"
         with tempfile.TemporaryDirectory(
@@ -61,7 +63,8 @@ class TestTaskStaticFiles(unittest.TestCase):
         self.assertEqual(accepted.text, "protected task artifact")
 
     def test_configured_key_does_not_protect_health_or_docs(self):
-        """健康检查和 Swagger 文档保持公开，方便部署探针与人工配置。"""
+        """Health checks and Swagger docs stay public for deployment probes and
+        manual setup."""
 
         config.app["api_key"] = "task-file-secret"
 
@@ -69,7 +72,8 @@ class TestTaskStaticFiles(unittest.TestCase):
         self.assertEqual(self.client.get("/docs").status_code, 200)
 
     def test_unconfigured_cors_rejects_task_file_preflight(self):
-        """默认同源模式必须拒绝第三方网页对任务文件发起预检。"""
+        """The default same-origin mode must reject preflight requests for task
+        files from third-party web pages."""
 
         config.app["api_key"] = "task-file-secret"
 

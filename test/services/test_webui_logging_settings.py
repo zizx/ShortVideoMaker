@@ -8,7 +8,10 @@ from app.utils.logging_utils import get_logging_options, set_logging_options
 
 
 def test_logging_form_applies_runtime_and_persisted_settings():
-    """真实执行设置弹窗的 Streamlit 控件，修改等级及追踪后无需重启。"""
+    """Exercise the real Streamlit controls in the settings dialog.
+
+    Changing the level and request tracing applies without a restart.
+    """
     previous = get_logging_options()
     diagnostics = {}
     try:

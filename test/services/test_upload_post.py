@@ -57,7 +57,7 @@ class TestUploadPostService(unittest.TestCase):
     )
     @patch("app.services.upload_post.requests.post")
     def test_unconfigured_service_skips_request(self, mock_post):
-        """功能未启用时不能意外上传文件或消耗第三方 API 配额。"""
+        """A disabled feature must not upload files or spend third-party API quota."""
         result = UploadPostService().upload_video("/fake/v.mp4", "Title")
 
         self.assertFalse(result["success"])
@@ -68,7 +68,7 @@ class TestUploadPostService(unittest.TestCase):
     @patch("app.services.upload_post.os.path.exists", return_value=False)
     @patch("app.services.upload_post.requests.post")
     def test_missing_video_skips_request(self, mock_post, _exists):
-        """本地成片不存在时应在发起网络请求前返回明确错误。"""
+        """A missing local video returns a clear error before any network request."""
         result = UploadPostService().upload_video("/missing/v.mp4", "Title")
 
         self.assertFalse(result["success"])
@@ -80,7 +80,7 @@ class TestUploadPostService(unittest.TestCase):
     @patch("builtins.open", mock_open(read_data=b"fake"))
     @patch("app.services.upload_post.requests.post")
     def test_upload_request_error_returns_failure(self, mock_post, _exists):
-        """网络异常需要转换为稳定结果，不能让发布失败中断视频生成任务。"""
+        """Network errors become a stable result so cross-post failure never aborts video."""
         mock_post.side_effect = requests.exceptions.Timeout("upload timed out")
 
         result = UploadPostService().upload_video("/fake/v.mp4", "Title")
@@ -109,7 +109,7 @@ class TestUploadPostService(unittest.TestCase):
     @patch("app.services.upload_post.config.app", _CONFIG_BASE)
     @patch("app.services.upload_post.requests.get")
     def test_check_status_returns_payload_or_network_failure(self, mock_get):
-        """状态查询成功和失败应使用与上传接口一致的返回约定。"""
+        """Status checks, success or failure, follow the same contract as upload."""
         response = _mock_response()
         response.json.return_value = {"success": True, "status": "processing"}
         mock_get.return_value = response

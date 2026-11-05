@@ -1,16 +1,18 @@
-# pip 安装包与 PyPI 发布
+# pip Package and PyPI Releases
 
-发行包名采用 `mpt`，项目名称仍为 MoneyPrinterTurbo，当前待发布版本为 `1.3.9`。
-`1.3.8` 已于 2026-10-16 使用 `harry0703` 发布到
-[PyPI](https://pypi.org/project/mpt/1.3.8/)，同时提供 wheel 和 sdist。
-已发布文件不可覆盖，后续代码变更需要提升版本后重新构建和验证。
+The distribution package name is `mpt`; the project name remains MoneyPrinterTurbo.
+The version currently pending release is `1.3.9`. `1.3.8` was published to
+[PyPI](https://pypi.org/project/mpt/1.3.8/) by `harry0703` on 2026-10-16 as both a
+wheel and an sdist. Published files cannot be overwritten, so later code changes
+require a version bump, a rebuild and fresh verification.
 
-## 构建和安装
+## Build and install
 
-需要 Python 3.11 或更新版本。依赖会随 wheel 一起解析安装，FFmpeg 优先使用系统
-版本，也可使用 imageio-ffmpeg 提供的二进制。
+Python 3.11 or newer is required. Dependencies are resolved and installed with the
+wheel. FFmpeg prefers the system installation, but the binary provided by
+imageio-ffmpeg can also be used.
 
-用户从 PyPI 安装并启动：
+Users install from PyPI and start the application:
 
 ```sh
 python -m pip install mpt
@@ -18,7 +20,7 @@ mpt webui
 mpt cli --help
 ```
 
-本地构建和验证：
+Build and verify locally:
 
 ```sh
 uv build --out-dir storage/package/mpt-dist
@@ -28,10 +30,12 @@ mpt webui
 mpt cli --help
 ```
 
-正式上传前应确认 PyPI 账号、目标版本和发行包哈希，避免使用混有旧包的目录
-进行批量上传。每次发布均需用户明确授权，不随代码提交或推送自动发布。
+Before uploading, confirm the PyPI account, target version and artifact hashes, and
+avoid batch-uploading from a directory that still contains old packages. Every
+release requires explicit user authorization; a commit or push never publishes a
+release automatically.
 
-## 发布前检查
+## Pre-release checks
 
 ```sh
 uvx twine check --strict \
@@ -39,19 +43,24 @@ uvx twine check --strict \
   storage/package/mpt-dist/mpt-1.3.9.tar.gz
 ```
 
-检查 PyPI 说明页、发行包元数据和依赖可安装性，并在新虚拟环境中完成视频生成。
-只有明确授权上传后才执行正式发布；账号密码、验证码和 API Token 不写入仓库、
-命令示例或日志。各语种 README 提供用户安装入口，PyPI 的说明单独维护在
-`docs/pypi-description.md`；更新仓库文档不会自动修改已经发布的 PyPI 介绍页。
+Check the PyPI description page, package metadata and dependency installability, and
+complete a video generation in a fresh virtual environment. Publish only after
+explicit authorization; account passwords, verification codes and API tokens are
+never written to the repository, command examples or logs. Each language README
+provides the user installation entry point, while the PyPI description is maintained
+separately in `docs/pypi-description.md`; updating the repository documentation does
+not change the already published PyPI page.
 
-`mpt webui` 默认仅监听 `127.0.0.1`，从 8501 开始选择空闲端口，自动打开浏览器。
-可使用 `--host`、`--port` 指定地址，`--headless` 禁止自动打开浏览器：
+`mpt webui` listens on `127.0.0.1` only by default, picks a free port starting from
+8501, and opens a browser automatically. Use `--host` and `--port` to choose the
+address, and `--headless` to prevent the automatic browser launch:
 
 ```sh
 mpt webui --port 8503 --headless
 ```
 
-CLI 复用 `python cli.py` 的参数、任务流水线、退出码和 JSON 输出。完整离线示例：
+The CLI reuses the arguments, task pipeline, exit codes and JSON output of
+`python cli.py`. Full offline example:
 
 ```sh
 mpt cli --video-script "A short video from local materials." \
@@ -60,34 +69,45 @@ mpt cli --video-script "A short video from local materials." \
   --no-subtitle-enabled --bgm-type none
 ```
 
-在线文案、素材、TTS 等功能仍需相应服务的配置、密钥和网络连接。Whisper 模型按需
-加载，不放入 wheel。CLI 日志写入 stderr，成功时 stdout 输出包含视频路径的 JSON。
+Online script, material and TTS features still need the corresponding service
+configuration, credentials and network access. Whisper models are loaded on demand
+and are not bundled in the wheel. CLI logs go to stderr; on success, stdout prints
+JSON containing the video path.
 
-## 配置与数据
+## Configuration and data
 
-源码运行继续使用项目根目录。安装版不依赖当前工作目录，默认运行目录为：
+Source runs keep using the project root. The installed package does not depend on the
+current working directory; its default runtime directory is:
 
-| 平台 | 运行目录 |
+| Platform | Runtime directory |
 | --- | --- |
 | macOS | `~/Library/Application Support/MoneyPrinterTurbo` |
 | Windows | `%LOCALAPPDATA%\MoneyPrinterTurbo` |
-| Linux | `$XDG_DATA_HOME/MoneyPrinterTurbo`，默认 `~/.local/share/MoneyPrinterTurbo` |
+| Linux | `$XDG_DATA_HOME/MoneyPrinterTurbo`, defaulting to `~/.local/share/MoneyPrinterTurbo` |
 
-可通过 `MPT_HOME` 显式指定运行目录（源码版也支持）。其中：
+Set `MPT_HOME` to choose the runtime directory explicitly (the source version also
+supports it). Within it:
 
-- `config.toml`：首次运行从不含密钥的模板初始化，后续启动不会覆盖已有配置。
-- `storage/tasks`：任务和生成的视频；其他缓存和上传文件在 `storage` 下。
-- `resource/fonts`、`resource/songs`：首次使用时复制内置资源，可添加自己的文件。
-- `models`：可放置手工下载的 Whisper 模型。
+- `config.toml`: initialized on first run from a template that contains no
+  credentials; later starts never overwrite an existing configuration.
+- `storage/tasks`: tasks and generated videos; other caches and uploaded files live
+  under `storage`.
+- `resource/fonts`, `resource/songs`: built-in resources are copied on first use; you
+  can add your own files.
+- `models`: the place for manually downloaded Whisper models.
 
-用户资源只补齐缺失文件，升级不覆盖已有文件。安装包包含两种默认中文字体、
-越南语字体和内置背景音乐；备用的 `STHeitiLight.ttc`、`MicrosoftYaHeiNormal.ttc`
-不进入发行包，以控制文件体积。需要这些字重时可放入运行目录的 `resource/fonts`。
-源码版原有资源和外观不变。
+User resources are only filled in where files are missing; upgrades never overwrite
+existing files. The installed package includes two default Chinese fonts, a
+Vietnamese font and built-in background music; the fallback `STHeitiLight.ttc` and
+`MicrosoftYaHeiNormal.ttc` are excluded from the distribution to control its size.
+Add those files to `resource/fonts` in the runtime directory if you need those
+weights. The source version keeps its original resources and appearance.
 
-## 本地验证要求
+## Local verification requirements
 
-从 sdist 重建 wheel，安装到不继承系统包的新虚拟环境，离开源码目录并清除
-`PYTHONPATH` 后验证 `mpt cli --help`、WebUI 实际页面和视频生成。输出视频应由
-FFmpeg 完整解码，并确认配置与产物没有写入 site-packages。发行包不得包含
-本机 `config.toml`、密钥、缓存、任务产物或本地协作指令。
+Rebuild the wheel from the sdist, install it into a fresh virtual environment that
+does not inherit system packages, leave the source directory, clear `PYTHONPATH`, and
+verify `mpt cli --help`, the actual WebUI pages and video generation. The output video
+must decode fully with FFmpeg, and confirm that the configuration and artifacts were
+not written into site-packages. The distribution must not contain a local
+`config.toml`, secrets, caches, task artifacts or local collaboration instructions.

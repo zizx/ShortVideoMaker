@@ -13,7 +13,7 @@ WEBUI_MAIN = Path(__file__).resolve().parents[2] / "webui" / "Main.py"
 
 
 def _selectbox(app, key):
-    """语言切换会重建带 locale 后缀的控件，按稳定键查找。"""
+    """Language switching rebuilds widgets with locale suffixes; find them by stable key."""
     return next(
         item for item in app.selectbox
         if item.key == key or str(item.key).startswith(f"{key}_")
@@ -22,8 +22,9 @@ def _selectbox(app, key):
 
 @pytest.fixture
 def catalan_app():
-    # 使用无凭据的配置、空任务列表和禁止写盘的保存函数，避免界面测试读取
-    # 用户任务或修改真实配置。保留内置音色目录，检查实际的加泰罗尼亚语音色。
+    # Use credential-free config, an empty task list, and a save function that
+    # blocks writes so UI tests neither read user tasks nor change real config.
+    # Keep the built-in voice catalog to verify actual Catalan voices.
     with (
         patch.object(config, "app", {"llm_provider": "openai", "video_source": "pexels"}),
         patch.object(config, "ui", {
@@ -32,8 +33,9 @@ def catalan_app():
         }),
         patch.object(config, "try_save_config", return_value=True),
         patch.object(sm.state, "get_all_tasks", return_value=([], 0)),
-        # 固定为已完成且无更新，避免启动真实 GitHub 请求和后台刷新，
-        # 也不读写进程级版本检查缓存，让语言切换与弹窗测试保持确定性。
+        # Pin to completed with no update to avoid real GitHub requests and
+        # background refreshes, and avoid the process-level version cache so
+        # language-switch and dialog tests stay deterministic.
         patch.object(
             version_checker,
             "poll_available_update",
@@ -48,7 +50,7 @@ def catalan_app():
 
 
 def test_catalan_language_switch_preserves_script_and_script_language(catalan_app):
-    """真实执行 Streamlit 重跑：一次切换即生效，正文和生成语言不随 UI 丢失。"""
+    """Run a real Streamlit rerun: one switch takes effect, preserving copy and script language."""
     app = catalan_app
     assert "Català" in _selectbox(app, "top_language_code_selector").options
     assert _selectbox(app, "script_language_select").label == "Idioma del guió"
@@ -71,7 +73,7 @@ def test_catalan_language_switch_preserves_script_and_script_language(catalan_ap
 
 
 def test_catalan_builtin_voices_and_settings_dialog(catalan_app):
-    """两种内置音色可供选择；设置弹窗可使用新语言正常打开。"""
+    """Two built-in voices are selectable; the settings dialog opens in the new language."""
     assert set(voice.get_all_azure_voices(["ca-ES"])) >= {
         "ca-ES-EnricNeural-Male", "ca-ES-JoanaNeural-Female",
     }

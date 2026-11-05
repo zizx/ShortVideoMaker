@@ -1,4 +1,4 @@
-"""统一源码版和安装版的资源、配置及运行数据目录。"""
+"""Unified resource, config and runtime data directories for source and installs."""
 
 import os
 import shutil
@@ -18,7 +18,7 @@ def is_source_checkout() -> bool:
 
 
 def runtime_root() -> Path:
-    """源码沿用项目目录；安装版使用用户目录，也允许显式指定 MPT_HOME。"""
+    """Source checkouts use the project dir; installs use the user dir or MPT_HOME."""
     override = os.environ.get("MPT_HOME", "").strip()
     if override:
         return Path(override).expanduser().resolve()
@@ -41,7 +41,7 @@ def config_template() -> Path:
 
 
 def _copy_missing_resource(source: Path, target: Path) -> None:
-    """原子补齐内置资源；并发启动和升级都不覆盖用户已有的文件。"""
+    """Atomically add missing bundled resources without overwriting user files."""
     if target.exists():
         return
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -50,7 +50,8 @@ def _copy_missing_resource(source: Path, target: Path) -> None:
         with os.fdopen(fd, "wb") as destination, source.open("rb") as origin:
             shutil.copyfileobj(origin, destination)
         try:
-            # Windows rename 拒绝覆盖；POSIX 使用硬链接实现同样的独占发布。
+            # Windows rename refuses to overwrite; POSIX uses a hard link for the same
+            # exclusive publication.
             if os.name == "nt":
                 os.rename(temporary, target)
             else:
@@ -67,8 +68,9 @@ def resource_directory(sub_dir: str = "") -> Path:
     if is_source_checkout() and root == SOURCE_ROOT:
         return target
 
-    # 字体和音乐仍可由用户扩充。放在运行目录，避免 WebUI 上传或后续升级写入
-    # site-packages；只补齐缺失文件，保留用户编辑过的资源。
+    # Users can still extend fonts and music. They live in the runtime directory
+    # so WebUI uploads or later upgrades never write into site-packages; only
+    # missing files are added, preserving resources the user has edited.
     origin = (SOURCE_ROOT if is_source_checkout() else BUNDLED_ROOT) / "resource" / sub_dir
     if origin.is_dir():
         for source in origin.rglob("*"):

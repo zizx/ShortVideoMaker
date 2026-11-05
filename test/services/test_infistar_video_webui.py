@@ -1,4 +1,5 @@
-"""真实渲染新视频源及独立凭据，切换模型不得沿用上一模型的付费确认。"""
+"""Really render the new video source and dedicated credentials; switching
+models must not carry over the previous model's paid confirmation."""
 
 from pathlib import Path
 import json

@@ -10,7 +10,7 @@ from app.services import video
 
 class TestSubtitleBackgroundSettings(unittest.TestCase):
     def test_subtitle_background_is_disabled_by_default(self):
-        """新任务和独立字幕接口都不应在用户未指定时渲染字幕背景。"""
+        """New tasks and the standalone subtitle endpoint default to no background."""
         video_params = VideoParams(video_subject="default subtitle background")
         subtitle_request = SubtitleRequest(video_script="default subtitle background")
 
@@ -19,8 +19,9 @@ class TestSubtitleBackgroundSettings(unittest.TestCase):
 
     def test_all_locales_include_subtitle_background_labels(self):
         """
-        WebUI 新增字幕背景开关和颜色选择器后，所有已有语言都必须包含对应
-        翻译 key，避免某些语言界面直接显示英文内部 key。
+        After the WebUI adds the subtitle background toggle and color picker,
+        every existing language must include the corresponding translation keys
+        so some locales do not show raw English internal keys.
         """
         i18n_dir = Path(__file__).parent.parent.parent / "webui" / "i18n"
         required_keys = {
@@ -41,8 +42,10 @@ class TestSubtitleBackgroundSettings(unittest.TestCase):
 
     def test_video_params_accepts_disabled_and_colored_subtitle_background(self):
         """
-        UI 会根据开关向后端传递 False 或颜色字符串。这里验证 schema 仍然
-        接受这两种值，避免后续依赖或类型调整破坏 WebUI 与合成逻辑的契约。
+        The UI passes False or a color string to the backend depending on the
+        toggle. Verify the schema still accepts both values so later dependency
+        or type changes do not break the contract between the WebUI and
+        compositing logic.
         """
         base_params = {
             "video_subject": "subtitle background smoke",
@@ -62,9 +65,11 @@ class TestSubtitleBackgroundSettings(unittest.TestCase):
 
     def test_visible_text_position_centers_actual_mask_bounds(self):
         """
-        TextClip 的画布会包含字体行高和 baseline 空白，直接居中画布会让
-        字幕在背景里看起来偏下。这里用一个假 mask 模拟“可见文字像素
-        在画布下半部分”的情况，验证 helper 会按真实可见区域重新计算 y。
+        A TextClip canvas includes font line height and baseline padding, so
+        centering the canvas directly makes subtitles look low in the
+        background. Use a fake mask to simulate visible text pixels in the
+        lower half of the canvas, verifying the helper recomputes y from the
+        actual visible area.
         """
 
         class FakeMask:
@@ -83,8 +88,9 @@ class TestSubtitleBackgroundSettings(unittest.TestCase):
         )
 
         self.assertEqual(x, 0)
-        # 可见像素高度为 34px，放在 93px 容器中应上下各约 29px；
-        # 因为 mask 顶部从 12px 开始，所以 TextClip 本身需要向上移动到 18px。
+        # Visible pixel height is 34px, which leaves about 29px above and below
+        # in a 93px container; because the mask top starts at 12px, the
+        # TextClip itself needs to move up to 18px.
         self.assertEqual(y, 18)
 
     def test_detects_indistinguishable_subtitle_colors(self):
@@ -143,8 +149,10 @@ class TestSubtitleBackgroundSettings(unittest.TestCase):
 
     def test_wrap_text_keeps_closing_punctuation_with_text(self):
         """
-        中文长句按字符换行时，句号等闭合标点不能独占一行，否则字幕背景
-        会被一个单独的小点撑高。这里复现大字号中文长句的边界情况。
+        When Chinese long sentences wrap by character, closing punctuation such
+        as a period must not occupy its own line, or the subtitle background is
+        stretched by a lone dot. Reproduce the boundary case with a large-font
+        Chinese long sentence.
         """
         font_path = (
             Path(__file__).parent.parent.parent

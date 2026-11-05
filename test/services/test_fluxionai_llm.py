@@ -1,4 +1,5 @@
-"""Fluxion AI 接入回归：使用真实 SDK 编解码，HTTP 层不访问外网或消耗额度。"""
+"""Fluxion AI integration regression: real SDK encode/decode, while the HTTP layer
+never reaches the network or consumes quota."""
 
 import json
 from unittest.mock import patch
@@ -28,7 +29,8 @@ from app.services import llm
 def test_fluxionai_defaults_and_group_overrides(
     base_url, model, expected_url, expected_model
 ):
-    """空配置使用默认值，分组自定义值不被覆盖；其他 Provider 的配置保持原样。"""
+    """Empty config uses defaults and custom group values are not overridden;
+    other providers' configuration is left untouched."""
     snapshot = dict(config.app)
     requests = []
 
@@ -57,7 +59,8 @@ def test_fluxionai_defaults_and_group_overrides(
             },
         )
 
-    # 保留真实 SDK 的 URL 拼接和响应解析，只替换 HTTP 传输层，避免 mock 掩盖协议问题。
+    # Keep the real SDK's URL joining and response parsing and replace only the
+    # HTTP transport, so a mock cannot hide protocol problems.
     with httpx.Client(transport=httpx.MockTransport(respond)) as http_client:
         with OpenAI(
             api_key="test-fluxion-key",
@@ -85,7 +88,8 @@ def test_fluxionai_defaults_and_group_overrides(
 
 
 def test_fluxionai_missing_key_fails_before_network():
-    """缺少密钥时沿用统一错误提示，不创建客户端或发起付费请求。"""
+    """A missing key keeps the unified error message and creates no client or
+    billable request."""
     with patch.object(llm, "OpenAI") as factory:
         result = llm._generate_response(
             "test", app_config={"llm_provider": "fluxionai"}
@@ -97,7 +101,8 @@ def test_fluxionai_missing_key_fails_before_network():
 
 @pytest.mark.parametrize("status", [401, 403, 429, 500])
 def test_fluxionai_http_errors_are_not_successful_text(status):
-    """鉴权、分组权限、限流和服务端错误必须走错误路径，不能被当成正常文案。"""
+    """Authentication, group-permission, rate-limit and server errors must take
+    the error path and never be treated as normal copy."""
 
     def respond(request):
         return httpx.Response(
@@ -125,7 +130,8 @@ def test_fluxionai_http_errors_are_not_successful_text(status):
 
 
 def test_fluxionai_registry_metadata():
-    """锁定默认模型、协议、推广参数和模型链接，避免不同入口的信息不一致。"""
+    """Lock the default model, protocol, promotion parameters and model link so
+    different entry points cannot disagree."""
     provider = get_llm_provider("fluxionai")
     assert provider.default_model == "gpt-5.5"
     assert provider.default_base_url == "https://fluxionai.space/v1"

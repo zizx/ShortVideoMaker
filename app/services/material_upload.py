@@ -35,20 +35,25 @@ _WINDOWS_INVALID_FILENAME_CHARS = frozenset('<>:"|?*')
 _WINDOWS_RESERVED_FILENAMES = frozenset(
     {"CON", "PRN", "AUX", "NUL"}
     | {f"{prefix}{number}" for prefix in ("COM", "LPT") for number in range(1, 10)}
-    # 与 bgm.sanitize_upload_filename 及 webui/Main.py 的下载文件名规则保持同一份
-    # 官方清单：Win32 把 Latin-1 上标数字 ¹、²、³ 也当作设备编号。
+    # Keep the same official list as bgm.sanitize_upload_filename and the download
+    # filename rules in webui/Main.py: Win32 also treats the Latin-1 superscript
+    # digits ¹, ², ³ as device numbers.
     | {f"{prefix}{number}" for prefix in ("COM", "LPT") for number in ("¹", "²", "³")}
 )
-# 文件名会原样进入日志、API 响应和 WebUI 界面，因此除路径分隔符与 Win32 保留名外，
-# 还要拒绝所有控制符和会改变显示形态的字符。此前只拦截 ord < 32（C0 控制符），
-# 漏掉了同一类问题的另一半：
-# * C1 控制符 U+007F-U+009F：U+0085 会被部分日志查看器渲染成换行，一个文件名就能
-#   伪造出额外的、看起来独立的日志行。
-# * 双向文本控制符 U+200E/U+200F/U+202A-U+202E/U+2066-U+2069：U+202E 之后的字符会被
-#   反向渲染，"photo\u202egnp.mp4" 在资源管理器和日志里看起来像另一个扩展名。
-# * U+2028/U+2029（Unicode 行/段分隔符）同样能在一行日志里制造视觉换行。
-# 这些字符都无法在文件名输入框里键入，正常上传不受影响；判定与
-# bgm.sanitize_upload_filename、app/controllers/base.py 的 normalize_task_id 一致。
+# Filenames flow verbatim into logs, API responses and the WebUI, so besides path
+# separators and Win32 reserved names we also reject every control character and
+# every character that changes how the name is displayed. Previously only ord < 32
+# (C0 controls) was blocked, missing the other half of the same class of issues:
+# * C1 controls U+007F-U+009F: some log viewers render U+0085 as a newline, so one
+#   filename can forge extra, seemingly independent log lines.
+# * Bidirectional controls U+200E/U+200F/U+202A-U+202E/U+2066-U+2069: characters
+#   after U+202E are rendered in reverse, so "photo\u202egnp.mp4" looks like a
+#   different extension in Explorer and in logs.
+# * U+2028/U+2029 (Unicode line/paragraph separators) can likewise create a visual
+#   line break inside a single log line.
+# None of these characters can be typed into the filename input, so normal uploads
+# are unaffected; the check matches bgm.sanitize_upload_filename and
+# normalize_task_id in app/controllers/base.py.
 _UNSAFE_FILENAME_CHARACTERS = frozenset(
     chr(code)
     for code in (

@@ -26,7 +26,7 @@ class TestLlmController(unittest.TestCase):
                     )
 
     def test_generate_video_script_forwards_all_prompt_fields(self):
-        """文案接口不能丢失高级提示词或段落数量。"""
+        """The script endpoint must not drop advanced prompts or paragraph count."""
         body = VideoScriptRequest(
             video_subject="Coffee",
             video_language="en",
@@ -55,7 +55,8 @@ class TestLlmController(unittest.TestCase):
         )
 
     def test_generate_video_terms_forwards_order_matching_mode(self):
-        """素材顺序匹配开关必须继续传递到关键词生成服务。"""
+        """The material order matching switch must keep being forwarded to the
+        keyword generation service."""
         body = VideoTermsRequest(
             video_subject="Coffee",
             video_script="First beans, then brewing.",
@@ -82,7 +83,8 @@ class TestLlmController(unittest.TestCase):
         )
 
     def test_generate_social_metadata_returns_service_payload(self):
-        """社交平台元数据接口应保持服务层结果的响应结构。"""
+        """The social platform metadata endpoint should preserve the service
+        layer's response structure."""
         body = VideoSocialMetadataRequest(
             video_subject="Coffee",
             video_script="Morning coffee.",

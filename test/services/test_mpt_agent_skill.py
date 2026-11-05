@@ -110,7 +110,7 @@ class TestMptAgentSkill(unittest.TestCase):
                 self.assertEqual(mpt_agent.selected_video_source(forwarded), actual.video_source)
 
     def create_project(self, root: Path) -> None:
-        """创建足够完成安装和配置检查的最小项目结构。"""
+        """Create the minimal project layout needed for install and config checks."""
         root.mkdir()
         (root / "cli.py").write_text("", encoding="utf-8")
         (root / "config.example.toml").write_text(
@@ -154,7 +154,7 @@ class TestMptAgentSkill(unittest.TestCase):
         self.assertIn("TOML", str(error.exception))
 
     def test_skill_runs_helper_from_its_working_directory(self):
-        """确保 Windows Agent 不会在命令中嵌入易被破坏的绝对路径。"""
+        """Ensure the Windows agent never embeds fragile absolute paths in commands."""
         text = SKILL_DOCUMENT.read_text(encoding="utf-8")
 
         self.assertIn(
@@ -251,7 +251,7 @@ class TestMptAgentSkill(unittest.TestCase):
             self.assertEqual(pixabay_missing, [])
 
     def test_local_video_source_requires_video_materials(self):
-        """本地素材源必须提供 --video-materials，否则应提前报错。"""
+        """The local material source requires --video-materials; fail early otherwise."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.toml"
             config_path.write_text(
@@ -278,7 +278,7 @@ class TestMptAgentSkill(unittest.TestCase):
             self.assertEqual(missing_eq, [])
 
     def test_openai_image_source_accepts_keyless_local_gateway(self):
-        """文生图素材源只需要端点与模型名，本地网关允许不配置 API Key。"""
+        """Image sources need only an endpoint and model; local gateways need no API key."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.toml"
             config_path.write_text(
@@ -302,7 +302,7 @@ class TestMptAgentSkill(unittest.TestCase):
             self.assertEqual(missing, [])
 
     def test_missing_openai_image_inputs_report_endpoint_and_model(self):
-        """端点或模型名缺失时必须回报字段名，且不能把可选的 Key 当作缺失。"""
+        """Report the missing endpoint or model field; an optional key is not missing."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.toml"
             config_path.write_text(
@@ -460,10 +460,12 @@ class TestMptAgentSkill(unittest.TestCase):
         self.assertNotIn("LLM_PROVIDER_OPTIONS_BEGIN", text)
 
     def test_supported_sources_match_the_cli_video_source_list(self):
-        """helper 的来源白名单必须与 cli.py 的 _CLI_VIDEO_SOURCES 同一集合。
+        """The helper's source allowlist must equal cli.py's _CLI_VIDEO_SOURCES.
 
-        脚本里手抄的这份清单曾经漏掉 wavespeed：CLI 接受该来源，helper 却报
-        "unsupported video source"。期望值从权威常量推导，新增来源时会先失败。
+        A hand-copied list in the script once missed wavespeed: the CLI accepted
+        the source but the helper reported "unsupported video source". The
+        expected set is derived from the authoritative constant, so a new source
+        fails the test first.
         """
         tree = ast.parse(
             (SKILL_SCRIPT.parents[2] / "cli.py").read_text(encoding="utf-8")
@@ -627,7 +629,7 @@ class TestMptAgentSkill(unittest.TestCase):
             self.assertEqual(missing, [])
 
     def test_infistar_source_uses_video_credentials_and_charge_confirmation(self):
-        """预检与实际视频服务使用相同凭据，不能误用 Infistar 大模型 Key。"""
+        """Preflight and the real video service share credentials, not the LLM key."""
         from app.services import infistar_video
 
         cases = (
@@ -669,7 +671,7 @@ class TestMptAgentSkill(unittest.TestCase):
                     )
 
     def test_infistar_environment_key_is_written_without_leaking_to_output(self):
-        """Agent 专用环境变量应写入独立视频配置，日志不能包含密钥。"""
+        """Agent env vars go to the dedicated video config; logs must not contain keys."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.toml"
             config_path.write_text(MINIMAL_CONFIG, encoding="utf-8")
@@ -688,7 +690,7 @@ class TestMptAgentSkill(unittest.TestCase):
             self.assertIn("infistar_video_api_key", output.getvalue())
 
     def test_missing_infistar_inputs_report_video_key_and_charge_flag(self):
-        """只缺视频接入信息时，不应误提示更换大模型 Provider。"""
+        """When only video access info is missing, do not suggest switching providers."""
         output = io.StringIO()
         with redirect_stdout(output):
             code = mpt_agent.report_missing_config(
@@ -782,7 +784,7 @@ class TestMptAgentSkill(unittest.TestCase):
             self.assertNotIn(secret, output.getvalue())
 
     def test_keyless_providers_stay_aligned_with_the_provider_registry(self):
-        """辅助脚本的无 Key 集合必须与 Provider 注册表保持一致。"""
+        """The helper's keyless provider set must stay aligned with the registry."""
         registry_keyless = {
             provider.provider_id
             for provider in LLM_PROVIDER_REGISTRY
@@ -793,7 +795,8 @@ class TestMptAgentSkill(unittest.TestCase):
 
     def test_claude_code_subscription_provider_needs_no_api_key(self):
         """
-        Claude Code 走本机订阅，辅助脚本不能再要求一把并不存在的 API Key。
+        Claude Code uses a local subscription, so the helper must not demand an
+        API key that does not exist.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.toml"
@@ -812,7 +815,7 @@ class TestMptAgentSkill(unittest.TestCase):
                 provider = mpt_agent.reuse_existing_llm_provider(config_path)
             active_provider, missing = mpt_agent.missing_config(config_path, [])
 
-            # 即使别的 Provider 已经配置了 Key，也不能悄悄把订阅用户切走。
+            # Even when another provider has a key, never silently switch the user.
             self.assertEqual(provider, "claude_code")
             self.assertEqual(active_provider, "claude_code")
             self.assertEqual(missing, [])
@@ -842,8 +845,8 @@ class TestMptAgentSkill(unittest.TestCase):
 
     def test_kimi_code_signed_in_provider_needs_no_api_key(self):
         """
-        Kimi Code 走 OAuth 订阅凭证，已登录时辅助脚本不能要求 API Key，
-        也不能把订阅用户切到别的 Provider。
+        Kimi Code uses OAuth subscription credentials; when signed in, the helper
+        must not require an API key or move the subscriber to another provider.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.toml"
@@ -870,7 +873,7 @@ class TestMptAgentSkill(unittest.TestCase):
             self.assertEqual(missing, [])
 
     def test_kimi_code_without_sign_in_reports_sign_in_not_api_key(self):
-        """未登录的 Kimi Code 缺的是登录动作；脚本应报告 sign-in 而非 API Key。"""
+        """A signed-out Kimi Code lacks a sign-in step; report sign-in, not an API key."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.toml"
             config_path.write_text(
@@ -1122,7 +1125,7 @@ class TestMptAgentSkill(unittest.TestCase):
             self.assertEqual(command[-2:], ["--stop-at", "video"])
 
     def test_generation_failure_prints_original_model_error(self):
-        """生成失败时保留模型原始错误，避免 Skill 层猜测供应商语义。"""
+        """Keep the model's original error on failure; the skill layer must not guess."""
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             task_id = "12345678-1234-1234-1234-123456789abc"
@@ -1188,7 +1191,7 @@ class TestMptAgentSkill(unittest.TestCase):
         )
 
     def test_dependency_sync_sets_default_lock_timeout_without_mutating_environment(self):
-        """默认值只作用于安装子进程，其他环境变量保持原样。"""
+        """The default applies only to the install child process; other env vars stay."""
         environment = {"UV_CACHE_DIR": "cache-fixture", "TOKEN": "private-fixture"}
         with (
             patch.dict(os.environ, environment, clear=True),
@@ -1207,7 +1210,7 @@ class TestMptAgentSkill(unittest.TestCase):
             self.assertEqual(run_mock.call_args.args[0], ["uv", "sync", "--frozen"])
 
     def test_dependency_sync_preserves_explicit_lock_timeout(self):
-        """用户自定义值包括空值或非法值，均交给 uv 自己校验。"""
+        """User-supplied values, including empty or invalid ones, are left to uv."""
         for value in ("600", "2400", "0", "", "invalid"):
             with (
                 self.subTest(value=value),
@@ -1223,7 +1226,7 @@ class TestMptAgentSkill(unittest.TestCase):
                 self.assertEqual(os.environ["UV_LOCK_TIMEOUT"], value)
 
     def test_dependency_sync_passes_timeout_to_real_child_process(self):
-        """不模拟 subprocess，真实验证默认值与用户覆盖能够传给子进程。"""
+        """No subprocess mocking: really verify defaults and overrides reach the child."""
         for configured, expected in ((None, "1200"), ("2400", "2400")):
             with self.subTest(configured=configured), patch.dict(os.environ), redirect_stdout(io.StringIO()):
                 os.environ.pop("UV_LOCK_TIMEOUT", None)
@@ -1236,7 +1239,7 @@ class TestMptAgentSkill(unittest.TestCase):
                 self.assertEqual(os.environ.get("UV_LOCK_TIMEOUT"), configured)
 
     def test_dependency_lock_timeout_has_actionable_hint_and_bounded_log_tail(self):
-        """复用用户实际报错；匹配完整输出，但仍仅输出末尾 30 行。"""
+        """Reuse the real user error; match all output but print only the last 30 lines."""
         output = "Timeout (300s) when waiting for lock on pyarrow.lock\n"
         output += "\n".join(f"line-{index}" for index in range(35))
         stderr = io.StringIO()
@@ -1259,7 +1262,7 @@ class TestMptAgentSkill(unittest.TestCase):
         self.assertIn("uv 0.9.4", text)
 
     def test_dependency_errors_do_not_misreport_cache_lock_timeout(self):
-        """网络超时、普通缓存错误和空输出不得被误诊为锁超时。"""
+        """Network timeouts, plain cache errors and empty output are not lock timeouts."""
         for output in ("HTTP request timeout", "Could not acquire lock: permission denied", "", None):
             with (
                 self.subTest(output=output),
@@ -1274,7 +1277,7 @@ class TestMptAgentSkill(unittest.TestCase):
             self.assertNotIn("UV_LOCK_TIMEOUT", stderr.getvalue())
 
     def test_dependency_lock_wait_alternative_wording_has_hint(self):
-        """兼容不同 uv 版本使用的 timed out 表述。"""
+        """Support the "timed out" wording used by different uv versions."""
         stderr = io.StringIO()
         with (
             patch.object(

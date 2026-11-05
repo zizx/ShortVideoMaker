@@ -21,8 +21,9 @@ import streamlit as st
 from loguru import logger
 from streamlit_tour import Tour
 
-# WebUI 作为独立入口运行时，需要让项目根目录优先于第三方依赖，
-# 避免依赖中的同名 app 包遮蔽 MoneyPrinterTurbo 自己的 app 包。
+# When the WebUI runs as a standalone entry point, the project root must take precedence over
+# third-party dependencies so a dependency's same-named app package cannot shadow
+# MoneyPrinterTurbo's own app package.
 root_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 if root_dir in sys.path:
     sys.path.remove(root_dir)
@@ -91,20 +92,22 @@ st.set_page_config(
 )
 
 
-# Streamlit 1.59 会在页面右上角默认展示 Deploy、skills nudge 等平台入口。
-# MoneyPrinterTurbo 是面向终端用户的本地工具，这些入口会造成顶部大块空白，
-# 也会让新用户误以为需要安装额外组件。这里统一隐藏 Streamlit 平台工具栏，
-# 并压缩主容器顶部留白，只保留项目自己的标题、语言选择和业务设置区域。
+# Streamlit 1.59 shows Deploy, skills nudge and other platform entries in the top-right corner by
+# default. MoneyPrinterTurbo is a local tool for end users: those entries leave a large blank area
+# at the top and make new users think extra components have to be installed. Hide the Streamlit
+# platform toolbar here and tighten the top padding of the main container so only the project's own
+# title, language selector and settings remain.
 style_file = Path(__file__).with_name("styles.css")
 streamlit_style = f"<style>{style_file.read_text(encoding='utf-8')}</style>"
 st.markdown(streamlit_style, unsafe_allow_html=True)
-# 定义资源目录
+# Resource directory definitions
 font_dir = utils.font_dir()
 song_dir = utils.song_dir()
 i18n_dir = os.path.join(root_dir, "webui", "i18n")
 config_file = os.path.join(root_dir, "webui", ".streamlit", "webui.toml")
-# 语言列表必须在会话状态初始化前可用，首次访问时才能把浏览器 locale 映射到
-# 项目真正支持的语言；自动识别结果只进入当前会话，不修改全局配置。
+# The language list must be available before session state is initialized so the browser locale can
+# be mapped to a language the project really supports on first visit; automatic detection only
+# affects the current session, never the global configuration.
 locales = utils.load_locales(i18n_dir)
 DEFAULT_CHATTERBOX_BASE_URL = "http://127.0.0.1:4123/v1"
 DEFAULT_CHATTERBOX_MODEL = "chatterbox"
@@ -129,10 +132,11 @@ VOICE_MODE_TTS = "tts"
 VOICE_MODE_UPLOAD = "upload"
 VOICE_MODE_NONE = "none"
 LOOMLOOM_MAX_POLL_FAILURES = 5
-# WebUI 按素材能力分组展示视频来源，但底层仍保存原有 video_source 值。
-# AI 视频组与设置页共用同一业务顺序：合作服务商优先，并按秘塔、OFox、胜算云、
-# 火山引擎、无限星河排列；其余服务随后展示。这样两个入口的顺序一致，同时
-# 不改变 config.toml、历史任务和 API 请求中的字段语义，旧用户无需迁移配置。
+# The WebUI groups video sources by material capability but still stores the original video_source
+# value. The AI video group follows the same business order as the settings page: partner providers
+# first, in the order Metaso, OFox, LoomLoom, Volcano Engine, Infistar; all other services come
+# afterwards. Both entry points then agree, while field semantics in config.toml, historical tasks
+# and API requests stay unchanged, so existing users need no config migration.
 VIDEO_SOURCE_GROUPS = {
     "stock_video": ("pexels", "pixabay", "coverr"),
     "ai_video": (
@@ -148,23 +152,27 @@ VIDEO_SOURCE_GROUPS = {
     "ai_image": ("openai_image", "codex_image"),
     "local": ("local",),
 }
-# Upload-Post 的 API Key 与发布用户分别在两个页面管理，并且发布用户名称
-# 不等于登录邮箱。集中维护入口可以避免多语言文案各自硬编码 URL 后发生偏差，
-# 也方便用户从 WebUI 直接完成首次配置和后续账号维护。
+# The Upload-Post API Key and the publishing user are managed on two separate pages, and the
+# publishing user name is not the login email. Keeping the manage URLs in one place avoids
+# hard-coded URLs drifting apart across locales and lets users complete first-time setup and later
+# account maintenance directly from the WebUI.
 UPLOAD_POST_API_KEYS_URL = "https://app.upload-post.com/api-keys"
 UPLOAD_POST_MANAGE_USERS_URL = "https://app.upload-post.com/manage-users"
-# 素材设置与视频来源说明共用推广入口，避免两个位置的链接参数不一致。
+# The material settings and the video-source description share one promo entry so the link
+# parameters stay consistent in both places.
 OFOX_REFERRAL_URL = (
     "https://ofox.ai/?utm_source=github"
     "&utm_medium=sponsorship&utm_content=moneyprinterturbo"
 )
-# “默认”是 WebUI 专用哨兵，不会写入 config.toml，也不会传给 FFmpeg。
-# 后端在 video_codec 未配置时继续采用稳定的 libx264；单独保留该哨兵可以区分
-# “跟随项目默认策略”和“用户明确固定 libx264”，便于未来安全调整默认策略。
+# "Default" is a WebUI-only sentinel: it is never written to config.toml and never passed to FFmpeg.
+# The backend keeps using the stable libx264 default when video_codec is unset; keeping the sentinel
+# separate distinguishes "follow the project default policy" from "user explicitly pinned libx264",
+# which makes future default changes safe.
 DEFAULT_VIDEO_CODEC_OPTION = "__default__"
-# LoomLoom 的能力接口只返回模型 ID 和展示名，不提供价格。这里仅维护用户确认过
-# 的参考价，用于帮助选择模型；最终费用按实际模型调用结算。别名同时覆盖
-# 当前展示名和常见模型 ID，未收录的新模型会自然返回空价格，不影响选择或报价。
+# The LoomLoom capability API only returns model IDs and display names, not prices. Only reference
+# prices confirmed by users are kept here to help pick a model; the final charge is settled per
+# actual model call. Aliases cover both current display names and common model IDs, and unlisted new
+# models simply return an empty price without affecting model selection or quoting.
 LOOMLOOM_VIDEO_MODEL_PRICES = (
     (("veo31fast", "googleveo31fastpreview"), "￥0.700/秒", "￥0.700/秒"),
     (
@@ -220,16 +228,20 @@ _FINAL_VIDEO_PATTERN = re.compile(
     r"^final-(?P<index>\d+)\.(?P<extension>mp4|mov|mkv|webm)$",
     re.IGNORECASE,
 )
-# 与 app/services/bgm.py、app/services/material_upload.py 的上传文件名规则共用
-# 同一份清单：除路径分隔符与 Win32 非法字符外，还要移除所有控制符和会改变显示
-# 形态的字符。此前只拦截 ord < 32（C0 控制符），漏掉了同一类问题的另一半：
-# * C1 控制符 U+007F-U+009F：会原样进入下载文件名、日志和界面。
-# * 双向文本控制符 U+200E/U+200F/U+202A-U+202E/U+2066-U+2069：U+202E 之后的
-#   字符会被反向渲染，``holiday<U+202E>4pm`` 看起来像另一个扩展名。
-# * U+2028/U+2029（Unicode 行/段分隔符）能在一行日志里制造视觉换行。
-# 视频主题是用户自由输入的文本，可以直接粘贴这些字符，因此必须在这里过滤。
-# 字符串不使用 r'' 前缀：``\\`` 表示要排除的反斜杠本身，``\x``/``\u`` 转义由
-# Python 解析，避免把转义文本写进字符集。
+# Shares one list with the upload filename rules in app/services/bgm.py and
+# app/services/material_upload.py: besides path separators and Win32-invalid characters, every
+# control character and every character that changes how text is displayed must be removed.
+# Previously only ord < 32 (C0 controls) was blocked, which missed the other half of the same class
+# of problems:
+# * C1 controls U+007F-U+009F end up verbatim in download filenames, logs and the UI.
+# * Bidi text controls U+200E/U+200F/U+202A-U+202E/U+2066-U+2069 reorder rendering after
+#   U+202E, so ``holiday<U+202E>4pm`` looks like a different file extension.
+# * U+2028/U+2029 (Unicode line/paragraph separators) can create a visual line break
+#   inside a single log line.
+# The video subject is free-form user text, so these characters can be pasted directly and must be
+# filtered here. The string does not use the r'' prefix: ``\\`` stands for the backslash character
+# that must be excluded, while ``\x``/``\u`` escapes are resolved by Python so escape text is never
+# written literally into the character set.
 _DOWNLOAD_FILENAME_INVALID_PATTERN = re.compile(
     "[<>:\"/\\\\|?*\\x00-\\x1f\\x7f-\\x9f"
     "\\u200e\\u200f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]"
@@ -241,8 +253,9 @@ _WINDOWS_RESERVED_FILENAMES = frozenset(
         for prefix in ("COM", "LPT")
         for number in range(1, 10)
     }
-    # Win32 还会把 Latin-1 上标数字 ¹、²、³ 识别为设备编号。虽然这类主题
-    # 很少见，但仍会导致 Windows 下载失败，因此与普通数字保留名统一处理。
+    # Win32 also treats the Latin-1 superscript digits ¹, ² and ³ as device numbers. Such subjects
+    # are rare but still break Windows downloads, so they are handled together with the plain
+    # numeric reserved names.
     | {
         f"{prefix}{number}"
         for prefix in ("COM", "LPT")
@@ -261,8 +274,9 @@ _RUNTIME_CONFIG_SECTIONS = {
     "voxcpm": config.voxcpm,
     "ui": config.ui,
 }
-# 设置预设与密钥备份使用各自的文件标识。导入时先校验 schema 和版本，
-# 避免把任务记录、config.toml 或其它 JSON 误当成本功能的导出文件。
+# Settings presets and key backups use their own file identifiers. Import validates the schema and
+# version first so task records, config.toml or any other JSON file is not mistaken for an export of
+# this feature.
 SETTINGS_PRESET_SCHEMA = "moneyprinterturbo.settings-preset"
 SETTINGS_PRESET_VERSION = 1
 SETTINGS_PRESET_FILE_NAME = "moneyprinterturbo-settings.json"
@@ -272,8 +286,9 @@ KEY_BACKUP_FILE_NAME = "moneyprinterturbo-keys.json"
 # Export files contain only settings or credentials, not media. Reject oversized
 # uploads before decoding and parsing them in the Streamlit process.
 MAX_SETTINGS_TRANSFER_BYTES = 2 * 1024 * 1024
-# 预设只描述生成参数。素材、配音和配乐都是本机文件路径，预设通常要在另一台
-# 机器或另一个容器里导入，带上这些路径只会指向不存在的文件。
+# A preset only describes generation parameters. Materials, voiceover and background music are local
+# file paths, and a preset is usually imported on another machine or container where those paths
+# would only point to missing files.
 PRESET_EXCLUDED_PARAM_KEYS = frozenset(
     {
         "video_materials",
@@ -281,8 +296,8 @@ PRESET_EXCLUDED_PARAM_KEYS = frozenset(
         "bgm_file",
     }
 )
-# 密钥按配置项名称后缀识别。新增 Provider 只要沿用现有命名，就会自动进入
-# 备份，不需要再维护第二份密钥清单。
+# Keys are detected by config key name suffix. A new provider that follows the existing naming
+# enters the backup automatically, so no second key list has to be maintained.
 CREDENTIAL_KEY_SUFFIXES = (
     "api_key",
     "api_keys",
@@ -291,14 +306,15 @@ CREDENTIAL_KEY_SUFFIXES = (
     "secret_key",
     "speech_key",
 )
-# 只恢复密钥而不恢复配套配置项时，凭据仍然不可用。这些配套项与密钥一起备份。
+# Restoring only the key without its companion settings leaves the credential unusable, so these
+# companion keys are backed up together with the key.
 CREDENTIAL_COMPANION_KEYS = {
-    # Azure 语音必须同时知道区域。
+    # Azure speech also needs to know the region.
     "azure": ("speech_region",),
-    # Provider 的额外字段由 Registry 声明，例如 Cloudflare AI Gateway 的
-    # Account ID 和 Gateway ID。只恢复 API Key 而丢掉这些字段时，换到另一台
-    # 机器后该 Provider 仍然无法调用。从 Registry 读取可以让以后新增的
-    # Provider 自动进入备份，不需要在这里维护第二份字段清单。
+    # Provider-specific extra fields are declared by the Registry, e.g. the Account ID and Gateway
+    # ID of Cloudflare AI Gateway. Restoring only the API Key and dropping these fields leaves the
+    # provider unusable on another machine. Reading them from the Registry pulls future providers
+    # into the backup automatically, without a second field list here.
     "app": tuple(
         provider.config_key(field.config_suffix)
         for provider in LLM_PROVIDER_REGISTRY
@@ -309,29 +325,31 @@ CREDENTIAL_COMPANION_KEYS = {
 NON_LLM_COMPANION_KEYS = {
     "app": ("upload_post_username",)
 }
-# 同一个密钥在不同面板可能使用各自的控件 key：音频面板直接编辑 Gemini 和
-# MiMo 的 LLM 密钥。恢复备份时必须清除每一个别名，否则遗留的旧值
-# 会在下一次 rerun 覆盖刚刚恢复的密钥。
+# The same key may use different widget keys in different panels: the audio panel edits the Gemini
+# and MiMo LLM keys directly. Restoring a backup must clear every alias, otherwise a stale value
+# overwrites the freshly restored key on the next rerun.
 CREDENTIAL_WIDGET_STATE_ALIASES = {
     ("app", "gemini_api_key"): ("gemini_tts_api_key_input",),
     ("app", "mimo_api_key"): ("mimo_tts_api_key_input",),
 }
-# ui 分区只保存界面偏好，不含任何凭据，备份时整体跳过。
+# The ui section only stores interface preferences and no credentials, so it is skipped entirely
+# during backup.
 KEY_BACKUP_EXCLUDED_SECTIONS = frozenset({"ui"})
 
 
 # -----------------------------------------------------------------------------
-# 启动配置、会话状态与本地化
+# Startup configuration, session state and localization
 # -----------------------------------------------------------------------------
 
 
 def _set_runtime_config(section_name, key, value):
     """
-    更新 WebUI 配置，但不等待正在生成视频的后台任务。
+    Update a WebUI config value without waiting for background video jobs.
 
-    后台任务结束前，配置层只保留同一配置项的最新值；任务释放配置锁时会自动
-    应用并保存。页面控件值仍由 Streamlit session_state 维护，因此暂存期间的
-    rerun 不会把用户刚输入的内容重置为旧配置。
+    Until the background job finishes, the config layer only keeps the latest value per config key
+    and applies plus saves it when the job releases the config lock. Widget values are still owned
+    by Streamlit session_state, so reruns during the staging window never reset what the user just
+    typed back to the old configuration.
     """
     config_section = _RUNTIME_CONFIG_SECTIONS[section_name]
     updated = config.update_config_nonblocking(config_section, key, value)
@@ -341,7 +359,7 @@ def _set_runtime_config(section_name, key, value):
 
 
 def _delete_runtime_config(section_name, key):
-    """删除 WebUI 配置项；后台任务占用配置时延后执行。"""
+    """Delete a WebUI config key; deferred while a background job holds the config."""
     config_section = _RUNTIME_CONFIG_SECTIONS[section_name]
     deleted = config.delete_config_nonblocking(config_section, key)
     if not deleted:
@@ -350,7 +368,7 @@ def _delete_runtime_config(section_name, key):
 
 
 def _save_runtime_config():
-    """请求保存 WebUI 配置；后台任务占用配置时立即返回。"""
+    """Request a config save; returns at once while a background job holds the config."""
     saved = config.try_save_config()
     if not saved:
         logger.debug("deferred WebUI config save until active task completes")
@@ -358,24 +376,25 @@ def _save_runtime_config():
 
 
 def _saved_ui_choice(key, options, default, section=None):
-    """读取一个持久化选择，并把旧配置或手工编辑的非法值降级为默认值。"""
+    """Read a persisted choice, degrading stale or hand-edited invalid values to the default."""
     options = list(options)
     section = config.ui if section is None else section
     saved = section.get(key, default)
     numeric_default = isinstance(default, (int, float)) and not isinstance(
         default, bool
     )
-    # bool 是 int 的子类，``True == 1``。手工把数值选项写成 TOML
-    # 布尔值时必须拒绝，不能让它伪装成第一个数值 option。
+    # bool is a subclass of int, and ``True == 1``. A numeric option hand-written as a TOML boolean
+    # must be rejected instead of passing as the first numeric option.
     if numeric_default and isinstance(saved, bool):
         return default
     for option in options:
         if saved == option:
-            # 返回 options 中的真实值，顺便把 TOML 1.0 等价归一化为
-            # 整数选项 1，避免下游参数类型随配置写法漂移。
+            # Return the real value from options, normalizing TOML 1.0 equivalents to the integer
+            # option 1 so downstream parameter types do not drift with how the config was written.
             return option
 
-    # TOML 中的数值通常保留原类型；仍兼容用户手工写成字符串的情况。
+    # Numbers in TOML usually keep their type; the string form a user may write by hand is still
+    # accepted.
     if numeric_default and isinstance(saved, str):
         try:
             converted = type(default)(saved)
@@ -388,7 +407,7 @@ def _saved_ui_choice(key, options, default, section=None):
 
 
 def _saved_ui_number(key, default, minimum, maximum, number_type=float):
-    """读取并限幅持久化数值，避免非法配置破坏 Streamlit slider。"""
+    """Read and clamp a persisted number so invalid config cannot break the Streamlit slider."""
     try:
         saved = config.ui.get(key, default)
         if isinstance(saved, bool):
@@ -402,7 +421,7 @@ def _saved_ui_number(key, default, minimum, maximum, number_type=float):
 
 
 def _saved_ui_bool(key, default):
-    """兼容 TOML 布尔值和常见手工字符串，拒绝含义不明的旧值。"""
+    """Accept TOML booleans and common hand-written strings, rejecting ambiguous legacy values."""
     value = config.ui.get(key, default)
     if isinstance(value, bool):
         return value
@@ -416,7 +435,7 @@ def _saved_ui_bool(key, default):
 
 
 def _saved_ui_color(key, default):
-    """只把标准六位十六进制颜色传给 Streamlit color picker。"""
+    """Pass only standard six-digit hex colors to the Streamlit color picker."""
     value = str(config.ui.get(key, default) or "").strip()
     if re.fullmatch(r"#[0-9a-fA-F]{6}", value):
         return value
@@ -424,7 +443,7 @@ def _saved_ui_color(key, default):
 
 
 def _saved_ui_text(key, default="", max_length=None):
-    """读取持久化文本并遵守对应 WebUI 控件的长度上限。"""
+    """Read persisted text while respecting the length limit of the matching WebUI widget."""
     value = str(config.ui.get(key, default) or default)
     if max_length is not None:
         value = value[:max_length]
@@ -433,16 +452,19 @@ def _saved_ui_text(key, default="", max_length=None):
 
 def _run_llm_read_operation(operation_name, operation):
     """
-    使用稳定的当前 LLM 配置执行只读请求，并避免等待视频生成任务。
+    Run a read-only request with the current stable LLM config without waiting for video generation
+    jobs.
 
-    能立即取得配置锁时继续沿用原来的互斥保护；锁已被后台视频任务持有时，
-    全局配置在任务结束前不会发生变化，因此可以安全复制当前配置，并叠加页面
-    尚未落盘的 Provider、模型和密钥。这样新文案使用界面中的最新选择，同时
-    不会改变正在生成的视频任务。
+    When the config lock is available immediately, the original mutual exclusion is kept. When a
+    background video job holds the lock, the global config cannot change until the job ends, so the
+    current config can safely be copied and overlaid with the provider, model and key values still
+    pending in the page. The new script then uses the latest UI selection without affecting the
+    video job that is already running.
     """
     with config.try_runtime_config_lock() as lock_acquired:
-        # 配置层在复制全局值和叠加待更新值期间持有队列锁，因此快照只能看到
-        # 更新前或更新后的完整状态，不会混用两组 Provider 参数。
+        # The config layer holds the queue lock while it copies global values and applies pending
+        # updates, so a snapshot only ever shows the state before or after an update and never mixes
+        # two sets of provider parameters.
         app_config_snapshot = config.snapshot_config_with_pending(config.app)
         if lock_acquired:
             return operation(app_config_snapshot)
@@ -455,19 +477,19 @@ def _run_llm_read_operation(operation_name, operation):
 
 
 def _parse_chatterbox_voices(voices):
-    # Chatterbox 是自托管服务，音色列表由用户在 WebUI 中手动输入。
-    # 这里统一兼容 TOML 数组和输入框里的逗号分隔字符串，避免下拉框、
-    # 试听按钮和后续生成流程使用不同格式导致状态不一致。
+    # Chatterbox is a self-hosted service and users type the voice list manually in the WebUI. This
+    # accepts both TOML arrays and comma-separated strings from the text input so the dropdown, the
+    # preview button and the later generation flow never disagree because of different formats.
     if isinstance(voices, str):
         return [v.strip() for v in voices.split(",") if v.strip()]
     return [str(v).strip() for v in voices or [] if str(v).strip()]
 
 
 def _sync_chatterbox_config_from_session_state():
-    # Streamlit 的按钮会触发整页 rerun，而 Chatterbox 配置输入框位于
-    # “试听语音合成”按钮之后。如果试听时只读取 config.chatterbox，可能拿不到
-    # 用户刚在输入框里填入的 base_url/model/voices。先从 session_state 同步一次，
-    # 可以保证按钮逻辑和输入框显示逻辑使用同一份最新配置。
+    # Streamlit buttons trigger a full-page rerun, and the Chatterbox config inputs render after the
+    # "Preview voice" button. Reading only config.chatterbox while previewing may miss the
+    # base_url/model/voices the user just typed. Syncing from session_state first guarantees the
+    # button logic and the input rendering use the same latest configuration.
     _set_runtime_config(
         "chatterbox",
         "base_url",
@@ -510,8 +532,9 @@ def _sync_chatterbox_config_from_session_state():
 
 
 def _sync_kokoro_config_from_session_state():
-    # 音色目录先于设置输入框渲染，先同步浏览器状态，确保本次 rerun 就使用
-    # 新端点和手工音色配置，不必再操作一次控件。
+    # The voice catalog renders before the settings inputs, so sync the browser state first: this
+    # rerun must already use the new endpoint and the manual voice list, without touching a widget
+    # again.
     _set_runtime_config(
         "kokoro",
         "base_url",
@@ -554,12 +577,13 @@ def _sync_kokoro_config_from_session_state():
 
 
 def _get_kokoro_voice_options(saved_voice_name: str) -> list[str]:
-    """会话内短缓存远端目录，断线时保留上次选择，不把故障当成用户改音色。"""
+    """Short per-session cache of the remote catalog; keep the last choice on failure."""
     if config.kokoro.get("voices"):
         return voice.get_kokoro_voices()
 
-    # 仅保留当前服务的一条缓存。更换端点/凭据立即重查，缓存不保存明文 Key；
-    # 30 秒内的其他 UI 操作不重复阻塞 5 秒等待一个已知离线的服务。
+    # Keep a single cache entry for the current service. Changing the endpoint or credentials
+    # re-queries immediately, the cache never stores a plaintext key, and other UI actions within 30
+    # seconds do not block for 5 seconds again on a service already known offline.
     signature = (
         (config.kokoro.get("base_url") or "").strip().rstrip("/"),
         _credential_signature(config.kokoro.get("api_key", "")),
@@ -578,17 +602,18 @@ def _get_kokoro_voice_options(saved_voice_name: str) -> list[str]:
     options = list(catalog["voices"])
     if not catalog["available"]:
         st.warning(tr("Kokoro Voices Unavailable"))
-        # 首次打开时可能没有缓存，仍保留配置文件中的真实选择；恢复连接后
-        # 只有成功返回的新目录才能判定某个旧音色确实已被服务器删除。
+        # There may be no cache on first open, so the real choice from the config file is kept;
+        # after reconnecting, only a successfully returned catalog can prove that an old voice was
+        # really deleted on the server.
         if voice.is_kokoro_voice(saved_voice_name) and saved_voice_name not in options:
             options.insert(0, saved_voice_name)
     return options or [f"kokoro:{voice.KOKORO_DEFAULT_VOICE}"]
 
 
 def _detect_audio_mime(audio_file: str, audio_bytes: bytes) -> str:
-    # 有些 OpenAI-compatible TTS 服务，例如 travisvn/chatterbox-tts-api，
-    # 即使请求 response_format=mp3，也会返回 WAV 内容。WebUI 试听如果固定
-    # 使用 audio/mp3，浏览器可能无法播放，因此这里按文件头识别真实格式。
+    # Some OpenAI-compatible TTS services, e.g. travisvn/chatterbox-tts-api, return WAV content even
+    # when response_format=mp3 is requested. If the WebUI preview always used audio/mp3 the browser
+    # might not play it, so the real format is detected from the header.
     header = audio_bytes[:12]
     if header.startswith(b"RIFF") and header[8:12] == b"WAVE":
         return "audio/wav"
@@ -611,7 +636,7 @@ def _detect_audio_mime(audio_file: str, audio_bytes: bytes) -> str:
 
 
 def _build_uploaded_file_path(uploaded_file, target_dir, allowed_extensions, prefix):
-    """为浏览器上传文件生成受控的服务端保存路径。"""
+    """Build a controlled server-side path for a browser-uploaded file."""
     original_name = os.path.basename(str(uploaded_file.name or ""))
     extension = os.path.splitext(original_name)[1].lower()
     if extension not in allowed_extensions:
@@ -622,8 +647,9 @@ def _build_uploaded_file_path(uploaded_file, target_dir, allowed_extensions, pre
 
     normalized_target_dir = os.path.realpath(target_dir)
     os.makedirs(normalized_target_dir, exist_ok=True)
-    # 不复用浏览器传入的文件名，避免路径分隔符、控制字符或同名覆盖。UUID 只用于
-    # 服务端落盘，不改变用户在上传控件中看到的原始名称。
+    # Do not reuse the browser-supplied filename, which avoids path separators, control characters
+    # or overwriting a same-named file. The UUID is only used for the server-side write and never
+    # changes the original name shown in the upload widget.
     file_path = os.path.realpath(
         os.path.join(normalized_target_dir, f"{prefix}-{uuid4().hex}{extension}")
     )
@@ -671,10 +697,11 @@ def _save_uploaded_local_materials(uploaded_files):
 
 
 def _initialize_session_state():
-    """集中初始化跨 rerun 保留的页面状态。"""
+    """Initialize the page state that must survive reruns in one place."""
     if not st.session_state.get("cross_post_recovery_checked"):
-        # WebUI 可以不经过 FastAPI 独立运行，因此也需要在首次会话初始化时处理
-        # 进程重启留下的发布状态。恢复失败时不写标记，后续 rerun 会再次尝试。
+        # The WebUI can also run standalone without FastAPI, so it must handle publish state left
+        # behind by a process restart during the first session init as well. A failed recovery
+        # writes no marker, so later reruns retry.
         recovered = tm.recover_interrupted_cross_posts()
         if recovered is not None:
             st.session_state["cross_post_recovery_checked"] = True
@@ -735,15 +762,17 @@ def _initialize_session_state():
             "loomloom_script_duration_seconds", 60, 10, 600, int
         ),
         "ui_language": initial_ui_language,
-        # 已落盘的本地素材允许用户只修改文案后继续复用。
+        # Local materials already persisted may be reused when the user only edits the script.
         "local_video_materials": [],
-        # 生成按钮回调先登记任务，使顶部入口能立即显示运行中数量。
+        # The generation button callback registers the task first so the top entry can show the
+        # running count immediately.
         "active_generation_tasks": {},
-        # 最近一次从当前页面提交的任务。生成改为后台执行后，页面 Fragment
-        # 通过这个 ID 查询状态；刷新时不再依赖正在执行的旧页面脚本。
+        # The task most recently submitted from this page. Now that generation runs in the
+        # background, the page Fragment queries its status by this ID; refreshes no longer depend on
+        # the old page script still executing.
         "current_generation_task_id": "",
-        # LoomLoom 询价与执行必须跨 Streamlit rerun 保留完全相同的输入和
-        # clientRequestId，避免网络重试产生重复付费任务。
+        # LoomLoom quoting and execution must keep exactly the same inputs and clientRequestId
+        # across Streamlit reruns so a network retry cannot create a duplicate paid task.
         "loomloom_script_batch": None,
         "loomloom_script_quote": None,
         "loomloom_script_input_signature": "",
@@ -769,8 +798,9 @@ def _initialize_session_state():
         "loomloom_video_capability_load_attempt": "",
         "loomloom_video_capability_error": "",
         "loomloom_video_model_id": "",
-        # 文案或完整配音刚生成时，在视频数量控件创建前消费这个摘要并自动
-        # 填入推荐素材数；消费后即清空，避免覆盖用户后续手动调整。
+        # Right after a script or a full voiceover is generated, this digest is consumed before the
+        # video-count widget is created to prefill the recommended material count; it is cleared
+        # once consumed so later manual adjustments are not overwritten.
         "loomloom_video_scene_autofill_digest": "",
         "wavespeed_confirm_charge": False,
         "volcengine_seedance_confirm_charge": False,
@@ -779,7 +809,8 @@ def _initialize_session_state():
         "ofox_confirm_charge": False,
         "metaso_minimax_confirm_charge": False,
         "muapi_confirm_charge": False,
-        # AI 视频按素材段计费，默认只生成一段，用户确认效果后再主动增加数量。
+        # AI video is billed per material segment, so one segment is generated by default and users
+        # add more after confirming the result.
         "loomloom_video_scene_count": _saved_ui_number(
             "loomloom_video_scene_count",
             1,
@@ -800,13 +831,14 @@ def tr(key):
     value = loc.get("Translation", {}).get(key)
     if value is not None:
         return value
-    # 新功能优先维护中英文。其它语言缺少单项翻译时统一回退英文，避免在多个
-    # locale 中复制相同英文后长期失去同步；英文也没有该键时才显示原始 key。
+    # New features are maintained in Chinese and English first. Other languages fall back to English
+    # for missing entries so the same English text is not copied into several locales and drifts
+    # apart; the raw key is shown only when English lacks it too.
     return locales.get("en", {}).get("Translation", {}).get(key, key)
 
 
 # -----------------------------------------------------------------------------
-# 任务管理：历史扫描、运行状态、参数恢复与列表交互
+# Task management: history scan, run state, parameter restore and list interaction
 # -----------------------------------------------------------------------------
 
 
@@ -842,10 +874,10 @@ def _safe_load_task_script(task_path):
 
 def _find_final_task_video(task_path: str) -> str:
     """
-    返回任务目录中序号最小的最终成片。
+    Return the final video with the lowest index in the task directory.
 
-    合成流程还会产生 combined、temp-clip 和 MoviePy 临时文件，这些文件不能
-    表示任务已成功完成，因此这里只接受 ``final-<序号>.<扩展名>``。
+    The composition step also produces combined, temp-clip and MoviePy temporary files; those do not
+    mean the task finished successfully, so only ``final-<index>.<ext>`` is accepted here.
     """
     try:
         files = os.listdir(task_path)
@@ -867,10 +899,11 @@ def _find_final_task_video(task_path: str) -> str:
 
 def _build_restore_upload_requirements(params: Mapping) -> dict:
     """
-    记录历史任务中无法由 Streamlit 自动恢复的上传文件依赖。
+    Record the upload dependencies of a historical task that Streamlit cannot restore.
 
-    浏览器不允许程序重新填充 file_uploader，因此恢复任务时需要单独记录本地
-    素材和自定义音频依赖，并在用户重新生成前检查是否已经主动补充或替换。
+    Browsers do not allow a program to refill file_uploader, so restoring a task has to record local
+    material and custom audio dependencies separately and check, before the user regenerates,
+    whether they were re-added or replaced.
     """
     return {
         "local_materials": params.get("video_source") == "local",
@@ -888,7 +921,7 @@ def _get_unmet_restore_upload_requirements(
     has_custom_audio: bool,
     voice_mode: str | None = None,
 ) -> set[str]:
-    """返回当前表单仍未满足的历史上传文件依赖。"""
+    """Return the historical upload dependencies still unmet by the current form."""
     requirements = requirements or {}
     unmet = set()
 
@@ -901,20 +934,23 @@ def _get_unmet_restore_upload_requirements(
 
     if requirements.get("custom_audio") and not has_custom_audio:
         if voice_mode is not None:
-            # 新版 WebUI 使用显式配音方式。用户切换到自动配音或无配音，表示
-            # 已主动替换历史上传音频；只有继续选择上传模式时才要求重新上传。
+            # The new WebUI uses an explicit voice mode. Switching to automatic voiceover or to no
+            # voiceover means the user already replaced the historical uploaded audio; only staying
+            # in upload mode requires uploading again.
             if voice_mode == VOICE_MODE_UPLOAD:
                 unmet.add("custom_audio")
         elif voice_name == requirements.get("original_voice_name", ""):
-            # 保留旧调用方按音色判断的兼容行为，避免影响 API 和已有测试工具。
+            # Keep the legacy behavior of judging by voice name so the API and existing test tooling
+            # are not affected.
             unmet.add("custom_audio")
 
     return unmet
 
 
 def _queue_task_restore(task_id):
-    # 任务列表运行在 fragment 中，不能直接修改已经创建的主表单控件状态。
-    # 这里只记录候选任务并触发整页 rerun，确认和参数恢复由主页面统一处理。
+    # The task list runs inside a fragment and cannot modify widgets already created on the main
+    # form. Only the candidate task is recorded here and a full-page rerun is triggered;
+    # confirmation and parameter restore are handled by the main page.
     st.session_state["task_restore_candidate_id"] = task_id
     st.session_state["task_manager_popover_nonce"] = (
         st.session_state.get("task_manager_popover_nonce", 0) + 1
@@ -959,8 +995,9 @@ def _remove_active_generation_task(task_id):
 
 
 def _prepare_generation_task():
-    # st.button 的 on_click 会在页面脚本重新执行前触发。这里提前生成任务 ID，
-    # 顶部任务管理入口就能在同一次 rerun 中显示“生成中”数量。
+    # st.button's on_click fires before the page script runs again. The task ID is created here in
+    # advance so the top task-management entry can show the "generating" count during the same
+    # rerun.
     current_id = _current_generation_task_id()
     if current_id and webui_task.is_generation_active(current_id):
         st.session_state["pending_generation_task_id"] = current_id
@@ -1002,8 +1039,9 @@ def _scan_history_tasks(limit=30):
     if not os.path.isdir(tasks_root):
         return []
 
-    # 任务管理 fragment 每两秒刷新一次。先只读取低成本的目录元数据并截取最近
-    # 的任务，再解析 script.json 和视频列表，避免历史任务很多时反复扫描全部内容。
+    # The task-management fragment refreshes every two seconds. It first reads only the cheap
+    # directory metadata and takes the most recent tasks, then parses script.json and the video
+    # list, so a large history is not fully scanned over and over.
     task_entries = []
     try:
         with os.scandir(tasks_root) as entries:
@@ -1021,7 +1059,8 @@ def _scan_history_tasks(limit=30):
                         )
                     )
                 except OSError as e:
-                    # 单个任务目录可能正在被删除，不应因此让整个任务面板失效。
+                    # A single task directory may be deleted concurrently; that must not break the
+                    # whole task panel.
                     logger.debug(f"skip unavailable task directory: {entry.path}, {e}")
     except OSError as e:
         logger.warning(f"failed to scan task directory: {tasks_root}, {e}")
@@ -1130,8 +1169,9 @@ def _collect_task_summaries(limit=20):
             "complete",
             "failed",
         }:
-            # 会话中的 active 标记只负责覆盖任务刚提交到状态存储前的极短窗口。
-            # 后台任务结束后必须以真实终态为准，不能把失败任务重新显示为生成中。
+            # The session's active flag only covers the very short window before a task is committed
+            # to the state store. Once a background task ends, the real terminal state wins and a
+            # failed task is never shown as generating again.
             continue
 
         task_path = os.path.join(utils.task_dir(), task_id)
@@ -1154,9 +1194,10 @@ def _collect_task_summaries(limit=20):
 
 
 def _is_headless_server():
-    # Docker 或无桌面的服务器部署中，WebUI 进程接触不到用户的桌面环境：
-    # xdg-open / webbrowser 只会在容器内静默失败。此时应改为浏览器内预览
-    # 视频、以路径提示代替打开目录。macOS/Windows 桌面部署不受影响。
+    # In Docker or headless server deployments the WebUI process cannot reach the user's desktop:
+    # xdg-open / webbrowser fail silently inside the container. In that case preview the video in
+    # the browser and show the path instead of opening the directory. macOS and Windows desktop
+    # deployments are unaffected.
     if sys.platform == "darwin" or sys.platform.startswith("win"):
         return False
     return not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
@@ -1171,7 +1212,8 @@ def _open_task_path(task_path):
     if not os.path.isdir(normalized_path):
         return
     if _is_headless_server():
-        # storage 目录通常以卷挂载映射回宿主机，提示相对路径即可定位文件。
+        # The storage directory is usually a volume mounted back to the host, so the relative path
+        # is enough to locate the file.
         rel_path = os.path.relpath(normalized_path, os.path.dirname(tasks_root))
         st.toast(f"{tr('Open Task Folder')}: ./storage/{rel_path}", icon="📂")
         return
@@ -1182,8 +1224,9 @@ def _open_task_video(video_file):
     tasks_root = os.path.abspath(utils.task_dir())
     normalized_file = os.path.abspath(video_file)
 
-    # 视频路径来自任务目录扫描或运行期状态。这里仍然限制只能打开任务目录
-    # 内的文件，避免 UI 操作被异常路径扩展成任意本地文件打开能力。
+    # The video path comes from a task directory scan or runtime state. Opening is still restricted
+    # to files inside the task directory so a crafted path cannot turn a UI action into arbitrary
+    # local file opening.
     if not normalized_file.startswith(tasks_root + os.sep):
         logger.warning(f"invalid task video path: {normalized_file}")
         return
@@ -1192,7 +1235,8 @@ def _open_task_video(video_file):
         return
 
     if _is_headless_server():
-        # 无桌面环境时在任务面板内嵌播放器预览，代替调用系统播放器。
+        # Without a desktop environment, embed a player in the task panel instead of calling the
+        # system player.
         st.session_state["task_preview_video_file"] = normalized_file
         return
 
@@ -1208,8 +1252,9 @@ def _open_task_video(video_file):
 
 
 def _delete_task(task_id, task_path, task_state=None):
-    # 页面展示的状态可能落后于后台任务。删除前同时检查传入状态、当前会话的
-    # 活跃任务和最新状态，避免任务刚开始或已产出中间视频时被误删。
+    # The state shown on the page may lag behind the background task. Before deleting, the passed
+    # state, the session's active tasks and the latest state are all checked so a task that just
+    # started or already produced intermediate videos is not deleted by mistake.
     current_task = None
     try:
         current_task = sm.state.get_task(task_id)
@@ -1229,8 +1274,8 @@ def _delete_task(task_id, task_path, task_state=None):
     tasks_root = os.path.abspath(utils.task_dir())
     normalized_path = os.path.abspath(task_path)
 
-    # 删除任务会移除任务状态和本地生成文件。这里必须限定在 storage/tasks
-    # 下，避免异常 task_path 造成误删其它本地目录。
+    # Deleting a task removes its task state and locally generated files. Paths must stay inside
+    # storage/tasks so an abnormal task_path cannot delete other local directories.
     if not normalized_path.startswith(tasks_root + os.sep):
         logger.warning(f"invalid task folder path for deletion: {normalized_path}")
         return False
@@ -1250,8 +1295,9 @@ def _delete_task(task_id, task_path, task_state=None):
 
 
 def _count_processing_tasks(tasks):
-    # 顶部任务管理入口只需要展示“生成中”任务数量。
-    # 这里复用内部状态 key 判断，避免依赖多语言展示文案导致不同语言下统计不一致。
+    # The top task-management entry only needs the number of "generating" tasks. It reuses the
+    # internal state keys so the count does not depend on localized display text and stays
+    # consistent in every language.
     processing_task_ids = {
         task["task_id"]
         for task in tasks
@@ -1268,13 +1314,14 @@ def _task_manager_label(processing_count):
 
 
 def _build_video_download_name(subject, index, total):
-    """根据视频主题生成跨平台安全的下载文件名。"""
+    """Build a cross-platform safe download filename from the video subject."""
     safe_subject = _DOWNLOAD_FILENAME_INVALID_PATTERN.sub(" ", str(subject or ""))
     safe_subject = re.sub(r"\s+", " ", safe_subject).strip(" .")[:80].rstrip(" .")
     if not safe_subject:
         safe_subject = "video"
-    # Win32 在识别设备名时会忽略扩展名前的尾随空格和句点。与背景音乐上传
-    # 的现有规则保持一致，避免 ``CON .topic`` 绕过保留名保护。
+    # Win32 ignores trailing spaces and dots before the extension when matching device names. Keep
+    # the same rule as background music uploads so ``CON .topic`` cannot bypass the reserved-name
+    # check.
     windows_basename = safe_subject.split(".", 1)[0].rstrip(" .").upper()
     if windows_basename in _WINDOWS_RESERVED_FILENAMES:
         safe_subject = f"_{safe_subject}"
@@ -1309,9 +1356,9 @@ def _render_task_table(filtered_tasks, key_prefix):
             )
             safe_task_key = "".join(ch if ch.isalnum() else "_" for ch in task_id)[:40]
 
-            # 使用 Streamlit 原生 bordered container + columns 保留每行操作。
-            # 相比自定义 HTML/CSS 表格，这种方式对 Streamlit 版本变更更稳；
-            # 相比 dataframe，又能保留播放、打开目录、删除等行内动作。
+            # Streamlit native bordered container + columns keep the per-row actions. This is more
+            # robust against Streamlit version changes than custom HTML/CSS tables and, unlike a
+            # dataframe, it keeps row actions such as play, open directory and delete.
             with st.container(
                 key=f"task_row_{key_prefix}_{safe_task_key}", border=True
             ):
@@ -1392,8 +1439,9 @@ def _render_task_manager_panel(tasks=None):
         st.info(tr("No Tasks Yet"))
         return
 
-    # Streamlit 1.59 支持有状态 Tabs 的惰性渲染。切换时只重新构建当前列表，
-    # 避免定时 Fragment 每两秒重复创建四套任务行和操作按钮。
+    # Streamlit 1.59 renders stateful Tabs lazily. Switching only rebuilds the current list so the
+    # periodic Fragment does not recreate four sets of task rows and action buttons every two
+    # seconds.
     status_tabs = [
         ("all", tr("All Tasks")),
         ("processing", tr("Task Status Processing")),
@@ -1420,7 +1468,8 @@ def _render_task_manager_panel(tasks=None):
 
 
 def _render_task_video_preview():
-    # 无桌面部署下“播放”按钮的浏览器内回退：在任务面板底部渲染播放器。
+    # Browser fallback for the "play" button in headless deployments: render a player at the bottom
+    # of the task panel.
     preview_file = st.session_state.get("task_preview_video_file")
     if not preview_file:
         return
@@ -1450,8 +1499,9 @@ def _render_task_video_preview():
 
 @st.fragment(run_every="2s")
 def _render_task_manager_entry():
-    # 任务可能由当前页面或其它页面触发生成。入口单独用 fragment 定时刷新，
-    # 只更新任务数量和 popover 内容，不打断主页面表单输入。
+    # Tasks may be generated from this page or any other page. The entry refreshes periodically in
+    # its own fragment and only updates the task count and popover content without interrupting form
+    # input on the main page.
     task_summaries = _collect_task_summaries()
     processing_task_count = _count_processing_tasks(task_summaries)
     with st.container(key="task_manager_entry", width="content"):
@@ -1545,17 +1595,18 @@ def _apply_pending_task_restore():
 
 def _apply_restored_params(params):
     """
-    把一份完整的生成参数写回页面控件状态。
+    Write a complete set of generation parameters back into widget state.
 
-    历史任务恢复和设置预设导入使用同一份参数模型，因此共用同一个实现，避免
-    新增字段时只更新其中一条路径。调用方必须在渲染任何控件之前执行，否则
-    Streamlit 会拒绝修改已经实例化的控件状态。
+    History restore and settings-preset import share one parameter model and therefore one
+    implementation, so a new field never has to be updated in two places. Callers must run this
+    before rendering any widget, otherwise Streamlit refuses to modify the state of widgets that
+    already exist.
     """
     video_terms = params.get("video_terms") or ""
     if isinstance(video_terms, list):
         video_terms = ", ".join(str(term) for term in video_terms)
 
-    # 文案与高级脚本设置。
+    # Script and advanced script settings.
     st.session_state["video_subject"] = params.get("video_subject") or ""
     st.session_state["video_script"] = params.get("video_script") or ""
     st.session_state["video_terms"] = str(video_terms)
@@ -1568,7 +1619,8 @@ def _apply_restored_params(params):
         params.get("custom_system_prompt") or llm.DEFAULT_SCRIPT_SYSTEM_PROMPT
     )
 
-    # 视频设置。素材上传控件不能由服务端写入，因此本地素材需要用户重新选择。
+    # Video settings. Material upload widgets cannot be written from the server side, so local
+    # materials have to be selected again by the user.
     video_source = params.get("video_source") or "pexels"
     _set_stable_widget_value("video_source_select", video_source)
     _set_stable_widget_value(
@@ -1594,9 +1646,9 @@ def _apply_restored_params(params):
     )
     _set_stable_widget_value(
         "video_clip_speed_slider",
-        # API 可以写入超过 WebUI 范围的速度，任务生成阶段会安全归一化，但
-        # 历史记录仍可能保留原值。恢复任务前再次归一化，避免给 Streamlit
-        # slider 注入越界值、NaN 或无穷值导致控件状态异常。
+        # The API may store a speed outside the WebUI range; task generation normalizes it safely,
+        # but history may still hold the original value. Normalize again before restoring a task so
+        # out-of-range, NaN or infinite values never reach the Streamlit slider and break its state.
         utils.normalize_clip_speed(params.get("video_clip_speed", 1.0)),
     )
     _set_stable_widget_value("video_count_select", params.get("video_count", 1))
@@ -1604,7 +1656,8 @@ def _apply_restored_params(params):
         params.get("match_materials_to_script", False)
     )
 
-    # 音频设置。TTS server 未写入旧任务，根据历史 voice_name 推断。
+    # Audio settings. The TTS server was not stored in old tasks; it is inferred from the historical
+    # voice_name.
     voice_name = params.get("voice_name") or voice.NO_VOICE_NAME
     tts_server = _infer_tts_server_from_voice(voice_name)
     if params.get("custom_audio_file"):
@@ -1623,8 +1676,9 @@ def _apply_restored_params(params):
     _set_stable_widget_value("bgm_type_select", bgm_type)
     _set_stable_widget_value("bgm_volume_select", params.get("bgm_volume", 0.2))
     if bgm_type == "preset" and params.get("bgm_file"):
-        # 预设歌曲控件使用文件名作为稳定业务值。历史任务可能保存绝对路径或
-        # 相对路径，统一取 basename 后即可匹配当前安全枚举出的歌曲列表。
+        # The preset song widget uses the filename as a stable business value. Historical tasks may
+        # store absolute or relative paths; taking the basename always matches the safely enumerated
+        # song list.
         _set_stable_widget_value(
             "preset_song_select", os.path.basename(str(params["bgm_file"]))
         )
@@ -1636,7 +1690,8 @@ def _apply_restored_params(params):
         params.get("video_music_prompt") or ""
     )
 
-    # 字幕设置。对旧任务中的越界数值做最小限幅，避免 Slider 无法初始化。
+    # Subtitle settings. Out-of-range values from old tasks are clamped minimally so the slider can
+    # initialize.
     st.session_state["subtitle_enabled_checkbox"] = bool(
         params.get("subtitle_enabled", True)
     )
@@ -1670,8 +1725,9 @@ def _apply_restored_params(params):
     )
 
     st.session_state.pop("local_video_materials_uploader", None)
-    # 历史任务只保存素材路径，不能保证这些文件在当前环境仍然存在。
-    # 同时清空当前页面已缓存的上传素材，避免恢复后误用另一个任务的文件。
+    # Historical tasks only store material paths, and those files may not exist in the current
+    # environment. Also clear the upload materials cached on the page so files from another task are
+    # not reused after restoring.
     st.session_state["local_video_materials"] = []
     st.session_state.pop("custom_audio_file_uploader", None)
     st.session_state.pop("voxcpm_reference_audio_uploader", None)
@@ -1733,35 +1789,37 @@ def _render_task_restore_dialog(task_id):
 
 
 def _dismiss_settings_dialog():
-    """关闭设置弹窗，并确保下一次整页 rerun 不会再次自动打开。"""
+    """Close the settings dialog and keep the next full-page rerun from reopening it."""
     st.session_state["settings_dialog_open"] = False
 
 
 def _open_settings_dialog(target_tab=None):
-    """打开设置弹窗，并可直接定位到指定业务标签页。"""
+    """Open the settings dialog, optionally jumping straight to a business tab."""
     st.session_state["settings_dialog_open"] = True
     if not target_tab:
         target_tab = "general"
     if target_tab:
-        # 这里只保存稳定的业务 ID，不保存翻译文本；真正创建 tabs 前再根据
-        # 当前界面语言解析 label，避免用户切换语言后旧文案成为非法选项。
+        # Only the stable business ID is stored here, never translated text; the label is resolved
+        # against the current UI language right before the tabs are created, so an old caption can
+        # never become an invalid option after a language switch.
         st.session_state["settings_dialog_target_tab"] = target_tab
 
 
 def _open_material_settings_dialog():
-    """供视频来源组件回调使用：直接打开素材服务设置。"""
+    """Callback for the video-source component: open the material service settings."""
     _open_settings_dialog("material")
 
 
 def _render_brand(available_update: str | None = None):
-    """渲染项目名称、当前版本和可选的更新入口。"""
+    """Render the project name, current version and the optional update entry."""
     update_link = ""
     if available_update:
         update_label = html.escape(
             tr("Update Available").format(version=available_update)
         )
-        # Streamlit 会继续用 Markdown 解析传入的 HTML。这里保持链接为单行，
-        # 避免多行字符串的缩进被识别成代码块，导致页面直接显示 HTML 源码。
+        # Streamlit keeps parsing the passed HTML with Markdown. Keep the link on a single line so
+        # the indentation of a multi-line string is not treated as a code block and the page does
+        # not render raw HTML source.
         update_link = (
             '<a class="mpt-brand__update" '
             f'href="{version_checker.LATEST_RELEASE_PAGE_URL}" '
@@ -1788,19 +1846,21 @@ def _render_brand(available_update: str | None = None):
 
 @st.fragment(run_every="1s")
 def _render_pending_version_check():
-    """检查未完成时只刷新品牌区域，避免阻塞或反复执行整页表单。"""
+    """Refresh only the brand area while the check runs, without running the whole page."""
     snapshot = version_checker.poll_available_update(config.project_version)
     if snapshot.complete:
-        # 检查完成后刷新一次整页，让顶部栏改为静态渲染并停止 fragment 轮询。
-        # 该刷新发生在后台请求完成之后，不会延迟初始页面的其它内容。
+        # Once the check completes, refresh the whole page so the top bar renders statically and
+        # stops the fragment polling. The refresh happens after the background request finished and
+        # does not delay the rest of the initial page.
         st.rerun(scope="app")
     _render_brand()
 
 
 def _render_top_bar():
-    """渲染品牌、任务管理、设置和语言切换组成的页面顶部栏。"""
-    # 顶部栏分为品牌区和操作区两个独立区域。窄屏下由 Streamlit
-    # 将两个区域整体换行，操作区内部再根据剩余宽度自动换行。
+    """Render the top bar with brand, task management, settings and language switcher."""
+    # The top bar consists of two independent areas: brand and actions. On narrow screens Streamlit
+    # wraps both areas as a whole, and the actions area wraps its own content according to the
+    # remaining width.
     with st.container(key="top_bar"):
         brand_col, actions_col = st.columns(
             [3.5, 2.0],
@@ -1859,17 +1919,20 @@ def _render_top_bar():
                         f"selected_language={selected_language_code}"
                     )
                     st.session_state["ui_language"] = selected_language_code
-                    # 浏览器自动识别只影响当前会话；只有用户主动切换下拉框时才
-                    # 写入 config.toml，后续新会话将优先使用该明确选择。
+                    # Automatic browser detection only affects the current session; only an explicit
+                    # change in the dropdown by the user is written to config.toml, and later
+                    # sessions prefer that explicit choice.
                     _set_runtime_config("ui", "language", selected_language_code)
                     _save_runtime_config()
-                    # 切换语言会先重跑顶部栏，正文控件尚未渲染就触发 rerun。
-                    # 显式保留本次创作内容，防止 Streamlit 清理旧控件状态后，
-                    # 新语言页面把已经输入的主题、文案和关键词重置为空。
+                    # Switching the language first reruns the top bar, so the rerun fires before the
+                    # body widgets are rendered. Explicitly keep the current creative content so the
+                    # new-language page does not reset the already entered subject, script and
+                    # keywords to empty after Streamlit clears old widget state.
                     for content_key in ("video_subject", "video_script", "video_terms"):
                         if content_key in st.session_state:
                             st.session_state[content_key] = st.session_state[content_key]
-                    # 切换语言后强制刷新，避免 selectbox 继续展示旧语言文案。
+                    # Force a refresh after the language switch so the selectbox no longer shows old
+                    # text.
                     st.rerun()
 
 
@@ -1892,14 +1955,15 @@ support_locales = [
 
 
 # -----------------------------------------------------------------------------
-# 通用 UI 组件、资源缓存与日志
+# Shared UI components, resource caches and logging
 # -----------------------------------------------------------------------------
 
 
 @st.cache_data(ttl=30, show_spinner=False)
 def get_all_fonts():
-    # 字体目录很少变化，但 Streamlit 每次控件交互都会 rerun 页面。短周期缓存
-    # 可以避免连续重复 os.walk，同时保证新增字体后最多 30 秒即可被发现。
+    # The font directory rarely changes, but Streamlit reruns the page on every widget interaction.
+    # A short-lived cache avoids repeated os.walk calls while newly added fonts are still discovered
+    # within 30 seconds.
     fonts = []
     for root, dirs, files in os.walk(font_dir):
         for file in files:
@@ -1913,8 +1977,8 @@ def get_all_fonts():
 
 @st.cache_data(ttl=30, show_spinner=False)
 def get_all_songs():
-    # 背景音乐与字体使用相同的短周期策略，不做永久缓存，兼顾 rerun 性能和
-    # 用户运行期间手动添加音乐文件的场景。
+    # Background music uses the same short-lived policy as fonts and is never cached permanently,
+    # balancing rerun performance against music files a user adds while the app is running.
     songs = []
     for root, dirs, files in os.walk(song_dir):
         for file in files:
@@ -1925,15 +1989,15 @@ def get_all_songs():
 
 def open_task_folder(task_id):
     try:
-        # task_id 应始终是服务端生成的 UUID。这里先做格式校验，避免异常值
-        # 通过路径拼接访问任务目录之外的位置，也避免后续打开目录时触发
-        # 平台 shell 对特殊字符的解释。
+        # task_id should always be a server-generated UUID. Validating the format first prevents
+        # abnormal values from reaching outside the task directory through path joining and from
+        # making the platform shell interpret special characters when the directory is opened.
         normalized_task_id = str(UUID(str(task_id)))
         tasks_root = os.path.abspath(utils.task_dir())
         path = os.path.abspath(os.path.join(tasks_root, normalized_task_id))
 
-        # 即使 UUID 校验通过，也再次确认最终路径仍在任务根目录内，避免
-        # 未来调用方调整 task_id 来源时引入路径穿越风险。
+        # Even after UUID validation, confirm the resolved path is still inside the task root so a
+        # future caller changing the task_id source cannot introduce a path traversal risk.
         if not path.startswith(tasks_root + os.sep):
             logger.warning(f"invalid task folder path: {path}")
             return
@@ -1946,9 +2010,10 @@ def open_task_folder(task_id):
 
 @st.cache_resource
 def init_log():
-    # 基础日志 Handler 属于进程级资源，而不是页面会话状态。Streamlit 每次组件
-    # 交互都会 rerun 页面脚本，代码热重载也可能让缓存失效。日志初始化只能
-    # 精确替换终端 Handler，不能清空正在生成任务使用的 WebUI 临时 Handler。
+    # The base log handlers are process-level resources, not page session state. Streamlit reruns
+    # the page script on every widget interaction and hot reloads may invalidate caches. Log init
+    # may only replace the console handler exactly; it must not clear the WebUI temporary handler
+    # used by running tasks.
     _lvl = get_logging_options()[0]
 
     return configure_terminal_logger(
@@ -1971,8 +2036,9 @@ def tr_optional(key, fallback_language=""):
 
 
 def render_onboarding_tour():
-    # 引导只覆盖三个稳定入口，不尝试控制 Dialog、Tabs 或业务表单。这样既能让
-    # 新用户理解完整流程，也不会把引导状态与 Streamlit 的动态组件生命周期耦合。
+    # The tour only covers the three stable entry points and never tries to control Dialogs, Tabs or
+    # business forms. New users still understand the whole flow while the tour state stays decoupled
+    # from Streamlit's dynamic widget lifecycle.
     steps = [
         Tour.bind(
             "open_settings_dialog_button",
@@ -1997,16 +2063,18 @@ def render_onboarding_tour():
         ),
     ]
 
-    # streamlit-tour 1.1.0 没有在 Python 构造参数中暴露导航文案，但底层
-    # Driver.js 支持在每一步的 popover 配置中覆盖按钮文本。这里统一注入本地化
-    # 文案，并对内容做 HTML 转义，因为组件会通过 innerHTML 渲染这些字段。
+    # streamlit-tour 1.1.0 does not expose navigation labels as Python constructor arguments, but
+    # the underlying Driver.js supports overriding the button text in each step's popover config.
+    # Localized text is injected here and HTML-escaped because the component renders these fields
+    # through innerHTML.
     previous_text = html.escape(tr("Onboarding Previous"))
     next_text = html.escape(tr("Onboarding Next"))
     done_text = html.escape(tr("Onboarding Done"))
     for index, step in enumerate(steps):
         step.popover["prevBtnText"] = f"&larr; {previous_text}"
-        # Driver.js 会在合并单步配置时覆盖已经替换过变量的进度模板，因此直接
-        # 写入当前步骤和总步骤数，避免页面显示未解析的 {{current}} 占位符。
+        # Driver.js overrides the already substituted progress template when it merges the
+        # single-step config, so the current and total step numbers are written directly to avoid an
+        # unresolved {{current}} placeholder in the UI.
         step.popover["progressText"] = f"{index + 1} / {len(steps)}"
         if index == len(steps) - 1:
             step.popover["doneBtnText"] = done_text
@@ -2022,8 +2090,9 @@ def render_onboarding_tour():
         one_time_tour=True,
     )
 
-    # 每个 Streamlit 会话只主动启动一次。是否已经完成则由组件通过浏览器
-    # localStorage 判断，避免页面 rerun 或普通控件交互反复弹出引导。
+    # The tour is started actively only once per Streamlit session. Whether it was already completed
+    # is decided by the component through browser localStorage, so page reruns or normal widget
+    # interaction do not pop it up again.
     auto_start_key = f"{ONBOARDING_TOUR_KEY}-auto-started"
     if not st.session_state.get(auto_start_key, False):
         st.session_state[auto_start_key] = True
@@ -2031,7 +2100,7 @@ def render_onboarding_tour():
 
 
 def _render_generation_logs(task_id):
-    """渲染后台任务日志快照，不从工作线程访问 Streamlit 会话状态。"""
+    """Render background task log snapshots without touching Streamlit state from workers."""
     if config.ui.get("hide_log", False):
         return
 
@@ -2043,7 +2112,7 @@ def _render_generation_logs(task_id):
 
 
 def _current_generation_task_id():
-    """URL 只保存本地任务 ID，让刷新/重连恢复原任务，不保存配置或凭据。"""
+    """The URL stores only the local task ID so refresh restores it, never config or keys."""
     task_id = st.session_state.get("current_generation_task_id", "")
     if not task_id:
         try:
@@ -2062,7 +2131,7 @@ def _generation_is_busy(task_id):
     try:
         task = sm.state.get_task(task_id)
     except Exception:
-        # 查询异常时不能把“状态未知”当作已完成而放开重复提交。
+        # A failed query must not be treated as "completed", which would allow duplicate submission.
         return True
     return _normalize_task_state((task or {}).get("state")) == const.TASK_STATE_PROCESSING
 
@@ -2108,7 +2177,7 @@ def _render_generation_activity(task):
 
 
 def _render_generation_task_snapshot(task_id, task):
-    """根据状态存储中的快照渲染进度、失败原因或最终成片。"""
+    """Render progress, failure reason or the final video from the state-store snapshot."""
     if not task:
         st.info(tr("Generating Video"))
         _render_generation_logs(task_id)
@@ -2227,8 +2296,9 @@ def _render_generation_task_snapshot(task_id, task):
         state == const.TASK_STATE_COMPLETE
         and st.session_state.get("handled_generation_task_id") != task_id
     ):
-        # Fragment 可能重复渲染同一个完成任务。无论是否开启自动打开目录，
-        # 每个任务都只处理一次完成事件，避免重复弹出资源管理器或重复写入日志。
+        # A Fragment may re-render the same finished task more than once. Whether or not
+        # auto-open-directory is enabled, each task handles its completion event only once so the
+        # file manager never opens twice and logs are not written twice.
         st.session_state["handled_generation_task_id"] = task_id
         if config.ui.get("open_task_folder_on_completion", True):
             open_task_folder(task_id)
@@ -2237,7 +2307,7 @@ def _render_generation_task_snapshot(task_id, task):
 
 @st.fragment(run_every=webui_task.TASK_LOG_REFRESH_INTERVAL_SECONDS)
 def _render_running_generation_task(task_id):
-    """只在任务运行期间轮询；结束后切回静态结果，停止不必要的定时刷新。"""
+    """Poll only while the task runs; render a static result once it ends."""
     try:
         task = sm.state.get_task(task_id)
     except Exception as exc:
@@ -2253,14 +2323,17 @@ def _render_running_generation_task(task_id):
     state = _normalize_task_state((task or {}).get("state"))
     if state in {const.TASK_STATE_COMPLETE, const.TASK_STATE_FAILED}:
         _remove_active_generation_task(task_id)
-        # 完整页面脚本现在没有耗时生成逻辑，可以安全 rerun 并把结果改为静态
-        # 渲染。这样任务结束后不会让浏览器永久保留一个两秒轮询的 Fragment。
+        # The full page script no longer has long-running generation logic, so it can safely rerun
+        # and switch the result to static rendering. The browser then does not keep a Fragment
+        # polling every two seconds after the task ends.
         st.rerun(scope="app")
 
     _render_generation_task_snapshot(task_id, task)
     if not webui_task.is_generation_active(task_id):
-        # 持久状态可能属于重启前或另一服务进程，不能断言远端任务已停止。
-        # 只允许解除当前页面的跟踪，不取消任务、不改写其真实状态。
+        # The persisted state may belong to a process from before a restart or to another service
+        # process, so it cannot be asserted that the remote task stopped. Only the current page's
+        # tracking may be released here; the task is not cancelled and its real state is not
+        # rewritten.
         st.warning(tr("Generation Untracked Worker Hint"))
         if st.button(tr("Stop Tracking Generation"), key=f"stop_tracking_generation_{task_id}"):
             _remove_active_generation_task(task_id)
@@ -2270,7 +2343,7 @@ def _render_running_generation_task(task_id):
 
 
 def _render_current_generation_task():
-    """在生成按钮下方恢复当前页面最近提交任务的可查询 UI。"""
+    """Restore the queryable UI for the latest submitted task under the generate button."""
     task_id = _current_generation_task_id()
     if not task_id:
         return
@@ -2281,7 +2354,8 @@ def _render_current_generation_task():
         logger.exception(
             f"failed to query current WebUI task: task_id={task_id}, error={exc}"
         )
-        # 即使首次读取失败，也要注册 Fragment，让状态后端恢复后自动继续。
+        # Register the Fragment even if the first read fails, so it continues automatically once the
+        # state backend recovers.
         _render_running_generation_task(task_id)
         return
 
@@ -2298,16 +2372,17 @@ def _render_current_generation_task():
 
 
 def get_llm_provider_tips(provider_id, **kwargs):
-    # LLM provider 说明文案统一使用 `llm_provider_tips.<provider_id>` 规则。
-    # 这样新增 provider 时只需要在 locale 中补文案；没有文案时不展示提示块，
-    # 避免 Main.py 里继续堆叠大量中英文硬编码说明。
+    # LLM provider tips all follow the `llm_provider_tips.<provider_id>` rule. Adding a provider
+    # then only needs a locale entry; when no text exists the tip block is not rendered, so Main.py
+    # does not accumulate large hard-coded Chinese/English explanations.
     provider = get_llm_provider(provider_id)
     if provider is None:
         return ""
 
-    # Provider 配置说明目前统一维护中文和英文两套规范模板；其它界面语言
-    # 统一使用英文，避免在 locale 中复制英文后长期不同步。后续某个语种完成
-    # 全量翻译后，再将它加入这里的独立维护范围。
+    # Provider setup tips are currently maintained as full Chinese and English templates; other UI
+    # languages fall back to English so copies of English do not drift out of sync in the locales. A
+    # language that completes a full translation can later be added to the independently maintained
+    # range here.
     ui_language = st.session_state.get("ui_language", "en")
     tips_language = ui_language if ui_language in {"zh", "en"} else "en"
     tips = (
@@ -2353,7 +2428,7 @@ def get_llm_provider_tips(provider_id, **kwargs):
 
 
 def format_llm_connection_error(provider_id, base_url, error):
-    """为可明确定位的鉴权错误补充配置检查建议，同时保留原始响应。"""
+    """Add config-check hints for clearly identifiable auth errors, keeping the raw response."""
     error_text = str(error or "").strip()
     if provider_id in {"openai_codex", "openai_chatgpt"}:
         if provider_id == "openai_chatgpt":
@@ -2400,8 +2475,8 @@ def get_llm_provider_label(provider):
 
 
 def get_tts_provider_tips(provider_id):
-    # TTS 配置说明与 LLM Provider 采用相同维护策略：只维护中英文，
-    # 其它界面语言统一回退英文，避免复制后长期不同步。
+    # TTS setup tips follow the same policy as LLM providers: only Chinese and English are
+    # maintained and other UI languages fall back to English so copies do not drift.
     ui_language = st.session_state.get("ui_language", "en")
     tips_language = ui_language if ui_language in {"zh", "en"} else "en"
     return (
@@ -2412,19 +2487,21 @@ def get_tts_provider_tips(provider_id):
 
 
 def localized_widget_key(name, *parts):
-    # 部分 Streamlit selectbox 使用稳定 key 记住选择状态，但展示文本来自 locale。
-    # 语言切换时把语言也放进 key，可以强制重建控件，避免选中项仍显示旧语言。
+    # Some Streamlit selectboxes use a stable key to remember the selection while the displayed text
+    # comes from the locale. Including the language in the key forces the widget to be rebuilt on a
+    # language switch so the selection no longer shows old text.
     language = st.session_state.get("ui_language", config.ui.get("language", ""))
     suffix_parts = [name, language, *[str(part) for part in parts if part]]
     return "_".join(suffix_parts)
 
 
 def stable_selectbox(label, options, default_value, key, format_func=None, **kwargs):
-    # Streamlit 1.59 对 selectbox 的状态复用更敏感：如果控件没有固定 key，
-    # 或者真实选项只是一组临时下标，页面 rerun 后容易被重新计算的 index 覆盖，
-    # 表现为用户第一次选择不生效、需要再选一次。这个 helper 统一用稳定业务值
-    # 作为真实选项，并在 session_state 里保存该值；展示文案只通过 format_func
-    # 转换，避免翻译文案、选项顺序或上游配置变化影响选择状态。
+    # Streamlit 1.59 is stricter about reusing selectbox state: without a fixed key, or with bare
+    # temporary indices as the real options, a rerun can overwrite the selection with a recomputed
+    # index, which shows up as the user's first pick not taking effect until it is chosen again.
+    # This helper always uses stable business values as real options and stores that value in
+    # session_state; display text is only converted by format_func, so translated text, option order
+    # or upstream config changes cannot affect the selection.
     options = list(options)
     if not options:
         raise ValueError(f"selectbox options cannot be empty: {key}")
@@ -2441,10 +2518,11 @@ def stable_selectbox(label, options, default_value, key, format_func=None, **kwa
         and bool(selected_value.strip())
     )
     if selected_value not in options and not has_valid_custom_value:
-        # 如果上游选项发生变化（例如切换 TTS provider 后声音列表变了），
-        # 旧值已经不合法。控件创建前直接初始化 session_state，之后只让 key
-        # 管理状态，不再同时传入 index。这样可以避免 Streamlit 在 rerun 时
-        # 用重新计算的 index 覆盖用户刚选择的值，导致第一次选择不生效。
+        # If the upstream options changed (e.g. the voice list changed after switching the TTS
+        # provider), the old value is no longer valid. Initialize session_state before the widget is
+        # created and let the key manage state afterwards without also passing index, so Streamlit
+        # cannot overwrite the freshly selected value with a recomputed index on rerun and make the
+        # first selection ineffective.
         st.session_state[widget_key] = default_value
 
     if format_func is None:
@@ -2459,10 +2537,11 @@ def stable_selectbox(label, options, default_value, key, format_func=None, **kwa
     )
 
 
-# Streamlit 原生 selectbox 暂不支持 HTML optgroup。这里使用 1.59 自带的
-# Components v2 封装原生 <select>/<optgroup>，无需引入前端依赖，同时保留浏览器
-# 原生的键盘导航、无障碍语义和移动端选择体验。组件只传递固定业务值和翻译文本，
-# 不接收任意 HTML，从边界上避免配置内容进入 innerHTML。
+# Streamlit's native selectbox does not support HTML optgroup yet. This uses the Components v2
+# shipped with 1.59 to wrap the native <select>/<optgroup> without adding frontend dependencies,
+# keeping native keyboard navigation, accessible semantics and mobile selection behavior. The
+# component only passes stable business values and translated text, never arbitrary HTML, so config
+# content can never reach innerHTML.
 _GROUPED_SELECT_COMPONENT = st.components.v2.component(
     "mpt_grouped_select",
     html="""
@@ -2613,7 +2692,7 @@ def grouped_selectbox(
     settings_label="",
     on_settings=None,
 ):
-    """渲染带不可选分组标题的单个下拉框，并返回稳定业务值。"""
+    """Render one selectbox with unselectable group headings and return the stable value."""
     if format_func is None:
         format_func = str
 
@@ -2638,8 +2717,9 @@ def grouped_selectbox(
     if default_value not in valid_values:
         default_value = valid_values[0]
 
-    # 业务选择保存在与旧 selectbox 相同的 session key 中，设置预设恢复和
-    # 语言切换逻辑无需分叉；组件自身使用独立 key，避免与业务状态冲突。
+    # Business choices are stored in the same session key as the old selectbox, so preset restore
+    # and language-switch logic need no branching; the component itself uses a separate key to avoid
+    # clashing with business state.
     widget_key = localized_widget_key(key)
     if widget_key not in st.session_state:
         st.session_state[widget_key] = default_value
@@ -2653,9 +2733,10 @@ def grouped_selectbox(
         data={
             "label": label,
             "settingsLabel": settings_label,
-            # 显式关联可见 label 与原生 select。组件 key 由固定业务名称和
-            # 语言代码组成，在页面内唯一，既方便鼠标点击标签聚焦控件，
-            # 也不会引入随机 ID 导致每次 rerun 都重建前端状态。
+            # Explicitly associate the visible label with the native select. The component key is
+            # built from a fixed business name plus the language code and is unique within the page,
+            # so clicking the label focuses the widget without a random ID that would rebuild the
+            # frontend state on every rerun.
             "controlId": f"{widget_key}_control",
             "value": selected_value,
             "groups": normalized_groups,
@@ -2666,16 +2747,18 @@ def grouped_selectbox(
     changed_value = getattr(result, "selected", None)
     if changed_value in valid_values and changed_value != selected_value:
         st.session_state[widget_key] = changed_value
-        # Components v2 在当前脚本轮次返回事件时，本轮传给前端的 data 仍是
-        # 事件发生前的旧值。立即自动 rerun，让组件和依赖 video_source 的控件
-        # 同时收到新值；否则下拉框会被旧 data 短暂覆盖，用户只能再选一次。
+        # When Components v2 returns an event during the current script run, the data passed to the
+        # frontend in this run is still the old value from before the event. Rerun immediately so
+        # the component and the widgets depending on video_source both receive the new value;
+        # otherwise the selectbox is briefly overwritten with stale data and the user has to select
+        # a second time.
         st.rerun()
 
     return selected_value
 
 
 def sync_script_order_concat_mode():
-    """在文案顺序匹配开启时固定使用顺序拼接，并在关闭后恢复原选择。"""
+    """Force sequential concat while order matching is on; restore the old choice after."""
     widget_key = localized_widget_key("video_concat_mode_select")
     previous_key = "video_concat_mode_before_script_order_match"
     match_script_order = bool(st.session_state.get("match_materials_to_script", False))
@@ -2696,12 +2779,12 @@ def sync_script_order_concat_mode():
 
 
 def reset_script_system_prompt():
-    """将高级脚本设置中的系统提示词恢复为当前版本的默认内容。"""
+    """Reset the advanced script system prompt to the default content of this version."""
     st.session_state["custom_system_prompt"] = llm.DEFAULT_SCRIPT_SYSTEM_PROMPT
 
 
 def reset_subtitle_settings():
-    """恢复 WebUI 字幕控件和持久化配置中的默认值。"""
+    """Restore the defaults of the subtitle widgets and the persisted config."""
     defaults = DEFAULT_SUBTITLE_SETTINGS
     st.session_state["subtitle_enabled_checkbox"] = defaults["subtitle_enabled"]
     _set_stable_widget_value("font_name_select", defaults["font_name"])
@@ -2727,7 +2810,7 @@ def reset_subtitle_settings():
         "rounded_subtitle_background"
     ]
 
-    # 同步会持久化的 UI 选项，确保恢复后刷新页面仍保持默认设置。
+    # Sync the UI options that are persisted so a page refresh keeps the restored defaults.
     for key in (
         "subtitle_enabled",
         "font_name",
@@ -2749,14 +2832,14 @@ def reset_subtitle_settings():
 
 @st.dialog(tr("Final Prompt Preview"), width="large")
 def render_script_prompt_preview(prompt):
-    """展示将要发送给大模型的完整脚本生成提示词。"""
+    """Show the complete script-generation prompt that will be sent to the LLM."""
     st.code(prompt, language="markdown", wrap_lines=True)
 
 
 def stable_segmented_control(
     label, options, default_value, key, format_func=None, **kwargs
 ):
-    """使用稳定业务值创建单选分段控件，避免语言切换后状态被展示文案覆盖。"""
+    """Create a segmented control on stable business values so language switches keep state."""
     options = list(options)
     if not options:
         raise ValueError(f"segmented control options cannot be empty: {key}")
@@ -2814,7 +2897,7 @@ def get_groq_model_ids(api_key: str, base_url: str) -> list[str]:
 
 
 def _get_material_api_keys(config_key):
-    """将配置中的素材 API Key 统一转换为 WebUI 可编辑字符串。"""
+    """Normalize the material API keys in config into the string editable in the WebUI."""
     api_keys = config.snapshot_config_with_pending(config.app).get(config_key, [])
     if isinstance(api_keys, str):
         api_keys = [api_keys]
@@ -2822,7 +2905,7 @@ def _get_material_api_keys(config_key):
 
 
 def _save_material_api_keys(config_key, value):
-    """保存逗号分隔的素材 API Key，并允许用户显式清空旧配置。"""
+    """Store comma-separated material API keys, letting the user explicitly clear old config."""
     normalized_value = value.replace(" ", "")
     _set_runtime_config(
         "app",
@@ -2832,7 +2915,7 @@ def _save_material_api_keys(config_key, value):
 
 
 def _format_file_size(size_bytes):
-    """将字节数格式化为适合设置页展示的紧凑容量文本。"""
+    """Format a byte count as a compact size string for the settings page."""
     size = float(max(0, size_bytes))
     units = ("B", "KB", "MB", "GB", "TB")
     for unit in units:
@@ -2845,24 +2928,28 @@ def _format_file_size(size_bytes):
 @st.cache_data(ttl=30, show_spinner=False)
 def _get_video_cache_stats_data(max_age_days=None):
     """
-    短周期缓存目录统计，避免设置弹窗内普通控件交互反复扫描大量文件。
+    Short-lived statistics of the cache directory, so ordinary widget interaction in the settings
+    dialog does not rescan many files repeatedly.
 
-    缓存键包含清理天数，因此切换范围只会为每个范围扫描一次；主动刷新或清理
-    完成后会显式清空，最多 30 秒的缓存不会影响实际删除时的二次扫描。
+    The cache key includes the max age, so switching ranges only scans once per range; an active
+    refresh or cleanup clears it explicitly, and the 30 second cache cannot affect the second scan
+    performed during an actual deletion.
 
-    这里只缓存纯 dict，而不是 VideoCacheStats 实例：st.cache_data 需要用 pickle
-    序列化返回值，而 pickle 保存自定义类时按「模块名 + 类名」引用，并校验解析
-    出来的类与实例的类是同一个对象。Streamlit 源码监视器在本地源码文件发生变化
-    时（包含 Windows 上防病毒或索引器引起的偶发事件）会清空 sys.modules 中的
-    被监视模块并重新导入；此时仍打开的设置弹窗（Dialog 继承 fragment 行为，
-    内部交互不会重建 Main.py 顶层引用）持有的还是旧模块里的类，pickle 会抛
-    PicklingError: it's not the same object as ...，并被 Streamlit 包装成
-    UnserializableReturnValueError（对应 Streamlit 官方 issue #14593 的已知缺陷）。
-    纯 dict 按值序列化、不含类引用，因此不受模块重新导入影响。
+    Only a plain dict is cached here instead of a VideoCacheStats instance: st.cache_data needs to
+    pickle return values, and pickling a custom class stores a reference of module name plus class
+    name and verifies that the class resolved from it is the same object as the instance's class.
+    Streamlit's source watcher clears watched modules from sys.modules and re-imports them when a
+    local source file changes (including sporadic events caused by antivirus or indexers on
+    Windows); a settings dialog still open at that time (Dialog inherits fragment behavior and
+    internal interaction does not rebuild Main.py's top-level references) still holds the class from
+    the old module, so pickle raises PicklingError: it's not the same object as ... and Streamlit
+    wraps it into UnserializableReturnValueError (a known defect tracked as Streamlit issue #14593).
+    A plain dict is serialized by value with no class reference and is therefore unaffected by
+    module re-imports.
     """
     stats = cache_manager.get_video_cache_stats(max_age_days=max_age_days)
-    # 字段名与 VideoCacheStats 完全一致，供下方 _get_video_cache_stats 直接展开
-    # 还原；今后若 VideoCacheStats 增删字段，需要同步维护这里的字段映射。
+    # Field names match VideoCacheStats exactly so _get_video_cache_stats can expand them directly
+    # below; if VideoCacheStats ever adds or removes a field, this mapping must be updated too.
     return {
         "file_count": stats.file_count,
         "total_size": stats.total_size,
@@ -2872,17 +2959,18 @@ def _get_video_cache_stats_data(max_age_days=None):
 
 
 def _get_video_cache_stats(max_age_days=None) -> cache_manager.VideoCacheStats:
-    """在缓存边界之外把纯数据还原为 VideoCacheStats，调用方属性访问方式不变。"""
+    """Rebuild VideoCacheStats outside the cache boundary so callers keep attribute access."""
 
-    # 还原时使用当前生效的 cache_manager 模块；即使模块被重新导入，也只是重建
-    # 一个轻量 dataclass，不会再触发 pickle 的「类引用身份」校验。
+    # Restoration uses the currently effective cache_manager module; even if the module was
+    # re-imported, only a lightweight dataclass is rebuilt and pickle's "class reference identity"
+    # check is never triggered again.
     return cache_manager.VideoCacheStats(
         **_get_video_cache_stats_data(max_age_days=max_age_days)
     )
 
 
 def _render_cache_management_settings(panel):
-    """渲染默认在线视频素材缓存的统计、预览和安全清理操作。"""
+    """Render statistics, preview and safe cleanup of the default online video material cache."""
     with panel:
         cleanup_message = st.session_state.pop("video_cache_cleanup_message", None)
         if cleanup_message:
@@ -2976,26 +3064,26 @@ def _render_cache_management_settings(panel):
                     failed=result.failed_count,
                 ),
             )
-            # Streamlit 不允许在控件实例化后修改同名 session_state。通过递增
-            # nonce 让下一次 fragment rerun 创建未勾选的新控件，避免清理完成后
-            # 危险确认状态被继续保留。
+            # Streamlit does not allow modifying a same-named session_state entry after the widget
+            # is instantiated. Incrementing a nonce makes the next fragment rerun create a fresh
+            # unchecked widget so the dangerous confirmation state is not kept after cleanup.
             st.session_state["video_cache_cleanup_confirm_nonce"] = confirm_nonce + 1
             _get_video_cache_stats_data.clear()
             st.rerun(scope="fragment")
 
 
 # -----------------------------------------------------------------------------
-# 设置预设导出导入与密钥备份
+# Settings preset export/import and key backup
 # -----------------------------------------------------------------------------
 
 
 def _is_credential_config_key(key):
-    """判断一个配置项名称是否表示凭据。"""
+    """Tell whether a config key name represents a credential."""
     return str(key).endswith(CREDENTIAL_KEY_SUFFIXES)
 
 
 def _is_backup_config_key(section_name, key):
-    """凭据本身及其配套配置项都属于密钥备份范围。"""
+    """Credentials and their companion config keys both belong to the key backup scope."""
     if _is_credential_config_key(key):
         return True
     if key in CREDENTIAL_COMPANION_KEYS.get(section_name, ()):
@@ -3005,12 +3093,13 @@ def _is_backup_config_key(section_name, key):
 
 def _credential_widget_state_keys(section_name, key):
     """
-    返回某个凭据配置项对应的全部 Streamlit 控件 key。
+    Return every Streamlit widget key belonging to one credential config key.
 
-    密码输入框都带 key，Streamlit 中 session_state 的值优先于控件的 value
-    参数。恢复备份后必须清除这些残留控件状态，否则页面会继续显示旧密钥，
-    并在下一次 rerun 把旧值重新写回配置，让恢复看起来没有生效。多个面板
-    共用同一个密钥时会各自持有控件状态，因此返回默认 key 和全部别名。
+    Password inputs all have keys, and in Streamlit session_state takes precedence over a widget
+    value argument. After restoring a backup these leftover widget states must be cleared, otherwise
+    the page keeps showing the old key and writes it back into the config on the next rerun, making
+    the restore look ineffective. When several panels share one key they each hold widget state, so
+    the default key and all aliases are returned.
     """
     if section_name == "app":
         default_widget_key = f"{key}_input"
@@ -3023,7 +3112,7 @@ def _credential_widget_state_keys(section_name, key):
 
 
 def _normalize_backup_value(value):
-    """归一化备份值，丢弃空字符串和空列表，避免恢复时覆盖成空配置。"""
+    """Normalize a backup value, dropping empty strings and lists so a restore keeps config."""
     if isinstance(value, list):
         items = [
             str(item).strip()
@@ -3038,7 +3127,7 @@ def _normalize_backup_value(value):
 
 
 def _collect_key_backup(config_sections):
-    """从运行期配置分区中收集所有已填写的密钥及其配套配置项。"""
+    """Collect every filled-in key and its companion config keys from runtime sections."""
     backup = {}
     for section_name, section in config_sections.items():
         if section_name in KEY_BACKUP_EXCLUDED_SECTIONS:
@@ -3056,12 +3145,12 @@ def _collect_key_backup(config_sections):
 
 
 def _count_backup_keys(backup):
-    """统计备份中的配置项数量，用于界面提示和禁用空导出。"""
+    """Count the config entries of a backup for the UI hint and to disable empty export."""
     return sum(len(entries) for entries in backup.values())
 
 
 def _build_key_backup_payload(config_sections, app_version):
-    """构造密钥备份文件内容。"""
+    """Build the key backup file content."""
     return {
         "schema": KEY_BACKUP_SCHEMA,
         "version": KEY_BACKUP_VERSION,
@@ -3072,11 +3161,11 @@ def _build_key_backup_payload(config_sections, app_version):
 
 def _load_transfer_payload(raw_bytes, schema, version):
     """
-    解析导出文件，并校验它确实来自本功能的同一版本。
+    Parse an exported file and verify that it comes from the same version of this feature.
 
-    用户可能上传任意 JSON。这里只接受声明了正确 schema 和版本的文件，让错误
-    提示停留在导入入口，而不是把无法识别的内容写进配置或控件状态。
-    Windows 编辑器可能保存带 BOM 的 JSON，因此按 utf-8-sig 解码。
+    Users may upload any JSON. Only files declaring the correct schema and version are accepted, so
+    the error message stays at the import entry instead of writing unrecognized content into config
+    or widget state. Windows editors may save JSON with a BOM, hence the utf-8-sig decoding.
     """
     if len(raw_bytes) > MAX_SETTINGS_TRANSFER_BYTES:
         raise ValueError("settings import exceeds the 2 MB limit")
@@ -3092,10 +3181,11 @@ def _load_transfer_payload(raw_bytes, schema, version):
 
 def _parse_key_backup(raw_bytes, config_sections):
     """
-    解析密钥备份文件，只保留当前版本认识的分区和配置项。
+    Parse a key backup file, keeping only the sections and keys known to this version.
 
-    备份文件可以手工编辑，也可能来自更新的版本。未知分区或非密钥配置项一律
-    忽略，避免通过导入功能改写与凭据无关的配置。
+    Backup files may be edited by hand or come from a newer version. Unknown sections and
+    non-credential keys are ignored, so importing cannot rewrite configuration unrelated to
+    credentials.
     """
     payload = _load_transfer_payload(raw_bytes, KEY_BACKUP_SCHEMA, KEY_BACKUP_VERSION)
     keys = payload.get("keys")
@@ -3126,7 +3216,7 @@ def _parse_key_backup(raw_bytes, config_sections):
 
 
 def _build_settings_preset_payload(params, app_version):
-    """构造生成参数预设文件内容。"""
+    """Build the generation-parameter preset file content."""
     preset_params = {
         key: value
         for key, value in params.items()
@@ -3138,8 +3228,9 @@ def _build_settings_preset_payload(params, app_version):
                 str(params["bgm_file"])
             )
         except ValueError:
-            # 自定义文件属于本机资源，不能进入可移植的设置预设。异常场景下保持
-            # 既有排除行为，避免导出文件包含绝对路径或另一台设备不存在的 UUID。
+            # Custom files are local resources and must not enter a portable settings preset. Keep
+            # the existing exclusion on failures so an exported file never contains absolute paths
+            # or a UUID that does not exist on another device.
             pass
         else:
             preset_params["bgm_file"] = Path(builtin_bgm_path).name
@@ -3153,10 +3244,11 @@ def _build_settings_preset_payload(params, app_version):
 
 def _parse_settings_preset(raw_bytes):
     """
-    解析预设文件并交给 VideoParams 校验。
+    Parse a preset file and hand it to VideoParams for validation.
 
-    预设可以在其它机器上生成，也可能被手工编辑。统一走模型校验可以复用既有
-    的取值范围约束，非法预设在导入时就被拒绝，而不是在生成任务时才失败。
+    Presets may be created on another machine or edited by hand. Going through the model reuses the
+    existing value-range constraints, so an invalid preset is rejected on import instead of failing
+    only when a generation job runs.
     """
     payload = _load_transfer_payload(
         raw_bytes, SETTINGS_PRESET_SCHEMA, SETTINGS_PRESET_VERSION
@@ -3171,19 +3263,20 @@ def _parse_settings_preset(raw_bytes):
         if key not in PRESET_EXCLUDED_PARAM_KEYS
     }
     if preset_params.get("bgm_type") == "preset" and preset_params.get("bgm_file"):
-        # 设置预设只能恢复当前版本真实存在的内置歌曲。服务层同时拒绝目录分隔符
-        # 和用户上传文件，防止导入文件借试听功能读取任意本机路径。
+        # A settings preset may only restore built-in songs that really exist in this version. The
+        # service layer also rejects directory separators and user uploads so an imported file
+        # cannot use the preview feature to read arbitrary local paths.
         builtin_bgm_path = bgm_service.resolve_builtin_bgm_file(
             str(preset_params["bgm_file"])
         )
         params_input["bgm_file"] = Path(builtin_bgm_path).name
-    # video_subject 是 VideoParams 的必填字段，但预设允许只保存风格设置。
+    # video_subject is a required VideoParams field, but a preset may store only style settings.
     params_input.setdefault("video_subject", "")
     return VideoParams.model_validate(params_input).model_dump(mode="json")
 
 
 def _apply_key_backup(restored_keys):
-    """把解析后的密钥写回运行期配置，并清除对应控件的残留状态。"""
+    """Write the parsed keys back into runtime config and clear leftover widget state."""
     restored_count = 0
     for section_name, entries in restored_keys.items():
         for key, value in entries.items():
@@ -3191,7 +3284,7 @@ def _apply_key_backup(restored_keys):
             for widget_key in _credential_widget_state_keys(section_name, key):
                 st.session_state.pop(widget_key, None)
             restored_count += 1
-    # ElevenLabs 音色列表按密钥缓存，换用另一份备份后必须重新拉取。
+    # The ElevenLabs voice list is cached by key, so another backup requires a refetch.
     for cache_key in list(st.session_state.keys()):
         if str(cache_key).startswith("elevenlabs_voices_"):
             del st.session_state[cache_key]
@@ -3199,7 +3292,7 @@ def _apply_key_backup(restored_keys):
 
 
 def _apply_pending_settings_preset():
-    """在渲染任何控件之前应用已导入的预设。"""
+    """Apply an imported preset before any widget is rendered."""
     preset_params = st.session_state.pop("settings_preset_payload", None)
     if not preset_params:
         return False
@@ -3210,7 +3303,7 @@ def _apply_pending_settings_preset():
 
 
 def _render_settings_transfer(params):
-    """渲染生成参数预设的导出与导入入口。"""
+    """Render the export and import entries for generation-parameter presets."""
     with st.expander(tr("Settings Preset"), expanded=False):
         st.caption(tr("Settings Preset Help"))
         preset_payload = _build_settings_preset_payload(
@@ -3234,8 +3327,8 @@ def _render_settings_transfer(params):
         )
         if uploaded_preset is None:
             return
-        # 上传的文件在之后每次 rerun 都会重新出现。记录已处理的文件标识，
-        # 避免用户改完控件后被同一个预设反复覆盖。
+        # The uploaded file reappears on every later rerun. The processed file identifier is
+        # recorded so the same preset does not overwrite widget changes the user made afterwards.
         if st.session_state.get("settings_preset_file_id") == uploaded_preset.file_id:
             return
 
@@ -3252,7 +3345,7 @@ def _render_settings_transfer(params):
 
 
 def _render_key_backup_settings(panel):
-    """渲染密钥备份的导出与恢复入口。"""
+    """Render the export and restore entries for the key backup."""
     with panel:
         backup_message = st.session_state.pop("key_backup_message", None)
         if backup_message:
@@ -3312,13 +3405,14 @@ def _render_key_backup_settings(panel):
                 "success",
                 tr("Keys Restored").format(count=restored_count),
             )
-        # 主页面上的 TTS 密钥输入框也需要读取恢复后的配置，因此整页刷新。
-        # 设置弹窗的打开状态保存在 session_state 中，刷新后会重新展开。
+        # The TTS key input on the main page also has to read the restored config, so refresh the
+        # whole page. The settings dialog open state lives in session_state and expands again after
+        # the refresh.
         st.rerun(scope="app")
 
 
 # -----------------------------------------------------------------------------
-# 设置与提示词弹窗
+# Settings and prompt dialogs
 # -----------------------------------------------------------------------------
 
 
@@ -3341,16 +3435,18 @@ def _render_logging_settings():
             )
             apply = st.form_submit_button(tr("Apply Logging Settings"))
         if apply:
-            # 诊断不改变生成参数，直接生效；持久化仍走非阻塞配置队列。
+            # Diagnostics do not change generation parameters and take effect directly; persistence
+            # still goes through the non-blocking config queue.
             config.update_logging_options(selected_level, selected_trace)
             _save_runtime_config()
             st.success(tr("Logging Settings Applied"))
 
 
-# 设置属于低频操作，使用中等尺寸 Dialog 避免长期占用主页面纵向空间，
-# 同时控制阅读行宽，避免弹窗在宽屏设备上显得过于松散。
-# Dialog 继承 fragment 行为，内部控件交互只重绘弹窗；函数末尾单独保存配置，
-# 关闭时通过回调触发整页同步，确保生成流程读取最新 Provider 和界面设置。
+# Settings are a low-frequency operation, so a medium-size Dialog keeps the main page's vertical
+# space and controls the reading width instead of looking too sparse on wide screens. Dialog
+# inherits fragment behavior, so internal widget interaction only redraws the dialog; the function
+# saves the config at the end, and closing triggers a full-page sync through a callback so the
+# generation flow reads the latest provider and UI settings.
 def _remember_settings_tab(widget_key, targets):
     selected = st.session_state.get(widget_key)
     for target, label in targets.items():
@@ -3683,8 +3779,9 @@ def _render_material_provider_settings(provider):
             configured_metaso_resolution in metaso_minimax.SUPPORTED_RESOLUTIONS
         )
         if not resolution_is_valid:
-            # 分辨率直接影响计费。手工配置错误时保留原值并要求用户
-            # 主动选择，不能在打开设置弹窗时静默改成价格更高的 2K。
+            # Resolution directly affects billing. When hand-written config is invalid the value is
+            # kept and the user is asked to choose explicitly; opening the settings dialog never
+            # silently switches to the pricier 2K.
             st.error(
                 tr("Metaso MiniMax Invalid Resolution").format(
                     value=configured_metaso_resolution,
@@ -3783,8 +3880,8 @@ def _render_material_provider_settings(provider):
             app_settings.get("ofox_provider", ofox.DEFAULT_PROVIDER_TYPE) or ""
         ).strip()
         if configured_ofox_vendor not in {value for _, value in ofox_vendor_options}:
-            # 用户在 config.toml 手工钉定了其它厂商名时保留该选择，
-            # 避免打开设置页就被下拉框覆盖回默认值。
+            # When the user pinned another vendor name in config.toml, keep that choice so opening
+            # the settings page does not overwrite it with the dropdown default.
             ofox_vendor_options.append((configured_ofox_vendor, configured_ofox_vendor))
         selected_ofox_vendor = stable_selectbox(
             tr("OFox Upstream Vendor"),
@@ -3811,8 +3908,8 @@ def _render_material_provider_settings(provider):
             str(app_config_snapshot.get("llm_provider", "") or "").lower()
             == "shengsuanyun"
         ):
-            # 大模型 Provider 已选胜算云时，视频生成直接复用
-            # 同一密钥，不再展示一个容易引起歧义的独立输入框。
+            # When the LLM provider is already LoomLoom, video generation reuses the same key, so no
+            # separate ambiguous input box is shown.
             st.caption(tr("Shengsuan Cloud API Key Reused"))
         else:
             configured_loomloom_token = str(
@@ -3849,8 +3946,8 @@ def _render_material_provider_settings(provider):
         )
         seedance_title = f"**{tr('Volcano Engine Seedance')}**"
         if seedance_reuses_llm_key:
-            # 只有复用大模型密钥无法从当前输入框直接看出，保留该提示
-            # 可以避免用户误以为必须重复填写；普通配置状态不再赘述。
+            # Key reuse is not visible from the input itself, so the hint is kept to stop users from
+            # thinking they must fill it in again; ordinary config states are not explained.
             seedance_title += f" :blue[{tr('Reusing LLM API Key')}]"
         st.markdown(seedance_title)
         seedance_api_key = st.text_input(
@@ -3879,8 +3976,8 @@ def _render_material_provider_settings(provider):
         ).strip()
         seedance_model = st.text_input(
             tr("Volcano Engine Seedance Model"),
-            # 内置默认值通过 placeholder 展示，用户自定义的
-            # 模型或接入点 ID 仍作为真实值展示和保存。
+            # The built-in default is shown as a placeholder while a user-defined model or endpoint
+            # ID is still displayed and saved as the real value.
             value=(
                 ""
                 if configured_seedance_model == volcengine_seedance.DEFAULT_MODEL_ID
@@ -4154,9 +4251,9 @@ def _render_material_provider_settings(provider):
             ),
         )
         _set_runtime_config("app", "openai_image_model", openai_image_model.strip())
-        # 只展示参考值，不将 OpenAI 官方端点写成默认配置。
-        # 兼容服务的 Base URL 和模型 ID 没有统一值；留空不会让
-        # 用户在未知情时误连官方付费接口，也不会覆盖旧配置。
+        # Show the reference value only and never write the official OpenAI endpoint as a default
+        # config. Compatible services have no single Base URL or model ID; leaving it empty keeps
+        # users from unknowingly hitting the paid official API and never overwrites legacy config.
         st.caption(tr("OpenAI Image Configuration Example"))
 
         with st.expander(tr("OpenAI Image Advanced Settings"), expanded=False):
@@ -4206,8 +4303,9 @@ def _render_settings_dialog():
     app_settings = config.snapshot_config_with_pending(config.app)
     ui_settings = config.snapshot_config_with_pending(config.ui)
     with st.container():
-        # 历史 hide_config 只用于隐藏旧基础设置面板。改为固定设置入口后，该值
-        # 不再有用户可见意义，统一迁移为 false，避免旧配置影响后续版本。
+        # The legacy hide_config only hid the old basic settings panel. With a fixed settings entry
+        # it no longer means anything to users, so it is migrated to false and old config cannot
+        # affect later versions.
         _set_runtime_config("app", "hide_config", False)
         tab_keys = {
             "general": "General Settings Tab",
@@ -4271,9 +4369,10 @@ def _render_settings_dialog():
                 is_enabled = app_settings.get("upload_post_enabled", False)
                 is_auto = app_settings.get("upload_post_auto_upload", False)
 
-                # 两个键各自独立:enabled 允许外部流程调用 Upload-Post,
-                # auto_upload 才决定渲染完成后是否自动发布。合并成一个复选框会在
-                # 两键不一致的配置下,仅打开设置对话框就把 enabled 改写为 False。
+                # The two keys are independent: enabled lets external flows call Upload-Post, while
+                # auto_upload decides whether publishing happens after rendering. Folding them into
+                # one checkbox would rewrite enabled to False merely by opening the settings dialog
+                # when the two keys disagree.
                 upload_post_enabled = st.checkbox(
                     tr("Enable Upload-Post Integration"),
                     value=is_enabled,
@@ -4401,8 +4500,9 @@ def _render_settings_dialog():
                             upload_post_youtube_privacy_status,
                         )
 
-                    # 受众声明只影响 YouTube 发布，不改变生成内容或其它平台的请求。
-                    # 使用真正的布尔选项，避免把展示文字或字符串当成 API 参数。
+                    # The audience declaration only affects YouTube publishing and does not change
+                    # the generated content or requests to other platforms. Real boolean options are
+                    # used so display text or strings never become API parameters.
                     saved_audience = app_settings.get(
                         "upload_post_youtube_made_for_kids", False
                     )
@@ -4413,7 +4513,8 @@ def _render_settings_dialog():
                     made_for_kids = st.selectbox(
                         tr("YouTube Audience"),
                         options=[False, True],
-                        # 非法配置保持未选择，不在打开设置时擅自改成非儿童声明。
+                        # Invalid config stays unselected instead of being silently changed to a
+                        # non-kids declaration when settings are opened.
                         index=int(saved_audience)
                         if isinstance(saved_audience, bool)
                         else None,
@@ -4433,7 +4534,7 @@ def _render_settings_dialog():
                             "app", "upload_post_youtube_made_for_kids", made_for_kids
                         )
 
-        # 左侧面板 - 日志设置
+        # Left panel - log settings
         with left_config_panel:
             if left_config_panel.open:
                 hide_log = st.checkbox(
@@ -4448,16 +4549,18 @@ def _render_settings_dialog():
 
         if cache_config_panel.open:
             _render_cache_management_settings(cache_config_panel)
-        # 密钥恢复会写回配置并清除密码控件状态，必须在下面渲染这些控件之前执行。
+        # Key restore writes back config and clears password widget state, so it must run before
+        # those widgets are rendered below.
         if key_backup_panel.open:
             _render_key_backup_settings(key_backup_panel)
 
-        # 中间面板 - LLM 设置
+        # Middle panel - LLM settings
 
         with middle_config_panel:
             if middle_config_panel.open:
-                # 下拉顺序、默认 label 和稳定 provider id 全部来自 Registry；locale
-                # 只覆盖展示文案，不再让 Main.py 维护第二份 Provider 列表。
+                # The dropdown order, default label and stable provider id all come from the
+                # Registry; the locale only overrides display text, so Main.py no longer maintains a
+                # second provider list.
                 llm_provider_ids = [
                     provider.provider_id for provider in LLM_PROVIDER_REGISTRY
                 ]
@@ -4485,8 +4588,9 @@ def _render_settings_dialog():
                         lambda value: value,
                     ),
                 )
-                # 配置表单和 Provider 说明并排展示，减少长说明在窄列中的换行，
-                # 同时充分利用基础设置面板的横向空间。
+                # The config form and the provider tips sit side by side, reducing line wrapping of
+                # long descriptions in a narrow column while using the horizontal space of the basic
+                # settings panel.
                 llm_form_panel, llm_help_panel = st.columns(
                     [0.9, 1.1],
                     gap="large",
@@ -4496,8 +4600,9 @@ def _render_settings_dialog():
                 _set_runtime_config("app", "llm_provider", llm_provider)
                 llm_provider_spec = get_llm_provider(llm_provider)
                 if llm_provider_spec is None:
-                    # 正常情况下下拉选项全部来自 Registry，不会进入该分支；保留
-                    # 明确错误用于诊断损坏的 session state 或后续接入遗漏。
+                    # Normally every dropdown option comes from the Registry and this branch is
+                    # unreachable; the explicit error is kept to diagnose corrupted session state or
+                    # a missing integration later.
                     raise RuntimeError(f"unsupported llm provider: {llm_provider}")
 
                 llm_api_key = app_settings.get(
@@ -4515,10 +4620,11 @@ def _render_settings_dialog():
                 provider_tip_context = {}
                 selected_service_endpoint = None
                 if llm_provider_spec.service_endpoints:
-                    # Kimi 等 Provider 的中国站和国际站使用不同账号体系。只让用户
-                    # 选择服务区域，再由 Registry 同步 API 申请入口和 Base URL，
-                    # 避免手工组合错误。已有空 Base URL 配置继续沿用中国站，只有
-                    # 尚未填写 Key 的全新配置才根据界面语言推荐对应入口。
+                    # Providers such as Kimi use separate account systems for the China and
+                    # international sites. The user only selects the service region and the Registry
+                    # syncs the API application entry and Base URL, avoiding manual mistakes. An
+                    # existing empty Base URL config keeps using the China site; only a brand-new
+                    # config without a key recommends the entry matching the UI language.
                     selected_service_endpoint = (
                         llm_provider_spec.select_service_endpoint(
                             configured_llm_base_url,
@@ -4599,8 +4705,9 @@ def _render_settings_dialog():
                             }
                         )
                     else:
-                        # 自定义模式只保留用户明确保存的地址，不将某个标准区域伪装
-                        # 成自定义值。输入为空时配置不会持久化，下一次仍回到兼容默认。
+                        # Custom mode keeps only the address the user saved explicitly and never
+                        # disguises a standard region as a custom value. An empty input is not
+                        # persisted, so the next run falls back to the compatible default.
                         llm_base_url = str(configured_llm_base_url or "").strip()
 
                 if llm_provider == "ollama":
@@ -4772,8 +4879,9 @@ def _render_settings_dialog():
                             ),
                         ),
                     )
-                # 输入框展示 Registry 默认值，但配置只保存真实的用户覆盖值。
-                # 这样默认模型、Base URL 更新后，未自定义的用户能够自动跟随。
+                # The input shows the Registry default while config only stores a real user
+                # override. When default models or Base URLs change, users who never customized them
+                # follow automatically.
                 _set_runtime_config(
                     "app",
                     llm_provider_spec.config_key("api_key"),
@@ -4796,8 +4904,9 @@ def _render_settings_dialog():
                     ),
                 )
 
-                # Provider 专用字段也由 Registry 声明。例如 Cloudflare AI Gateway
-                # 需要 Account ID；以后新增类似字段时无需再在 Main.py 增加判断。
+                # Provider-specific fields are declared by the Registry as well, e.g. Cloudflare AI
+                # Gateway needs an Account ID; similar fields added later need no extra branching in
+                # Main.py.
                 for field in llm_provider_spec.extra_fields:
                     field_config_key = llm_provider_spec.config_key(field.config_suffix)
                     field_value = llm_form_panel.text_input(
@@ -4837,7 +4946,8 @@ def _render_settings_dialog():
                     from app.services import kimi_code_oauth
                     from webui.kimi_login import render_kimi_login
 
-                    # 给嵌套 fragment 独立的容器，轮询重绘不占用后续控件的位置。
+                    # Give nested fragments their own container so polling redraws do not occupy the
+                    # position of later widgets.
                     with llm_form_panel.container():
                         render_kimi_login(
                             kimi_code_oauth.resolve_region(st_llm_base_url), tr
@@ -4881,7 +4991,7 @@ def _render_settings_dialog():
                             )
                         )
 
-        # 右侧面板 - API 密钥设置
+        # Right panel - API key settings
         with right_config_panel:
             if right_config_panel.open:
                 if "settings_material_group" not in st.session_state:
@@ -4931,32 +5041,32 @@ def _render_settings_dialog():
 
 
 # -----------------------------------------------------------------------------
-# 主生成表单：文案、视频、音频与字幕面板
+# Main generation form: script, video, audio and subtitle panels
 # -----------------------------------------------------------------------------
 
 
 def _create_loomloom_script_backend():
-    """从当前 WebUI/config.toml 配置创建批量文案客户端。"""
+    """Create the batch script client from the current WebUI and config.toml settings."""
     app_config_snapshot = config.snapshot_config_with_pending(config.app)
     settings = loomloom.LoomLoomSettings.from_mapping(app_config_snapshot)
     return loomloom.LoomLoomScriptBackend(settings)
 
 
 def _create_loomloom_video_backend():
-    """使用项目默认 SkillBot 和当前有效凭证创建视频客户端。"""
+    """Create the video client with the project default SkillBot and effective credentials."""
     app_config_snapshot = config.snapshot_config_with_pending(config.app)
     settings = loomloom.video_settings_from_mapping(app_config_snapshot)
     return loomloom.LoomLoomVideoBackend(settings)
 
 
 def _effective_loomloom_api_token():
-    """读取 WebUI 尚未落盘或 config.toml 中的胜算云 API Key。"""
+    """Read the LoomLoom API key from unsaved WebUI state or from config.toml."""
     app_config_snapshot = config.snapshot_config_with_pending(config.app)
     return loomloom.resolve_api_token(app_config_snapshot)
 
 
 def _effective_script_generation_backend():
-    """读取包含 WebUI 待保存修改的文案生成方式。"""
+    """Read the script-generation method, including WebUI changes not yet saved."""
     app_config_snapshot = config.snapshot_config_with_pending(config.app)
     backend = str(
         app_config_snapshot.get("script_generation_backend", "local") or "local"
@@ -4965,7 +5075,7 @@ def _effective_script_generation_backend():
 
 
 def _script_generation_method_help(selected_backend):
-    """让“文案生成方式”的问号内容严格跟随当前选择。"""
+    """Make the script generation method help text follow the current selection exactly."""
     if selected_backend != "loomloom":
         return tr("Script Generation Method Help")
 
@@ -4981,7 +5091,7 @@ def _script_generation_method_help(selected_backend):
 
 
 def _loomloom_video_scene_prompts(video_terms, subject, scene_count):
-    """按素材关键词生成有限数量的场景描述，供视频模型逐段生成素材。"""
+    """Build a bounded set of scene prompts from material keywords for per-segment video."""
     if isinstance(video_terms, str):
         terms = [
             term.strip() for term in re.split(r"[,，\n]", video_terms) if term.strip()
@@ -5008,7 +5118,7 @@ def _loomloom_video_scene_prompts(video_terms, subject, scene_count):
 
 
 def _loomloom_video_signature(batch, credential_fingerprint):
-    """将全部计费输入和凭证摘要纳入签名，参数变化后强制重新报价。"""
+    """Include all billing inputs and a credential digest so changes force a new quote."""
     payload = {
         "inputRows": [dict(row) for row in batch.input_rows],
         "credentialFingerprint": str(credential_fingerprint or "").strip(),
@@ -5020,7 +5130,7 @@ def _loomloom_video_signature(batch, credential_fingerprint):
 
 
 def _loomloom_video_account_signature(token):
-    """服务地址和凭据共同隔离模型目录及报价，不能跨端点复用已确认状态。"""
+    """Service address and credentials isolate catalog and quotes; state cannot cross them."""
     values = config.snapshot_config_with_pending(config.app)
     base_url = str(values.get("loomloom_base_url") or loomloom.DEFAULT_BASE_URL).strip().rstrip("/")
     payload = json.dumps([base_url, str(token or "").strip()])
@@ -5028,7 +5138,7 @@ def _loomloom_video_account_signature(token):
 
 
 def _load_loomloom_video_capability(token, *, force=False):
-    """按当前凭证缓存 Profile；刷新失败时保留同一凭证最近的成功结果。"""
+    """Cache the Profile per credential and keep the last success when a refresh fails."""
     normalized_token = str(token or "").strip()
     if not normalized_token:
         return None
@@ -5063,12 +5173,12 @@ def _load_loomloom_video_capability(token, *, force=False):
 
 
 def _normalize_loomloom_model_identifier(value):
-    """统一展示名和模型 ID 的分隔符、大小写，供本地价格表安全匹配。"""
+    """Normalize separators and case of display names and model IDs for local price lookup."""
     return re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", str(value or "").lower())
 
 
 def _loomloom_video_model_price(model):
-    """返回已知模型的（下拉框短价、选中后完整参考价）；未知模型返回空值。"""
+    """Return the short and full reference prices for a known model, else empty values."""
     identifiers = {
         _normalize_loomloom_model_identifier(model.model_id),
         _normalize_loomloom_model_identifier(model.display_name),
@@ -5080,13 +5190,13 @@ def _loomloom_video_model_price(model):
 
 
 def _format_loomloom_video_model_option(model):
-    """在模型名右侧展示短价格，避免多档分辨率价格把下拉框撑得过宽。"""
+    """Show a short price beside the model name so multi-resolution prices fit the dropdown."""
     compact_price, _ = _loomloom_video_model_price(model)
     return f"{model.display_name} · {compact_price}" if compact_price else model.display_name
 
 
 def _effective_voice_rate_before_audio_panel():
-    """视频面板位于音频面板之前，需从现有控件状态或配置读取当前语速。"""
+    """Video panel precedes audio panel; read the current speech rate from state or config."""
     raw_rate = st.session_state.get(
         localized_widget_key("voice_rate_select"),
         config.ui.get("voice_rate", 1.0),
@@ -5099,7 +5209,7 @@ def _effective_voice_rate_before_audio_panel():
 
 
 def _matching_full_voice_preview_duration(script, voice_rate):
-    """仅在文案、Provider、音色和语速均未变化时采用完整试听的真实时长。"""
+    """Use the full preview duration only if script, provider, voice and rate are unchanged."""
     cached = st.session_state.get("voice_preview_audio")
     if not isinstance(cached, dict) or cached.get("preview_type") != "full":
         return None
@@ -5138,7 +5248,7 @@ def _matching_full_voice_preview_duration(script, voice_rate):
 
 
 def _loomloom_video_coverage_plan(params):
-    """按真实或估算旁白时长推荐素材数；不足部分仍由原有循环逻辑补齐。"""
+    """Recommend a material count from narration duration; the loop still pads shortfalls."""
     script = str(params.video_script or "").strip()
     if not script:
         return None
@@ -5166,7 +5276,8 @@ def _loomloom_video_coverage_plan(params):
         "clip_duration": clip_duration,
         "needed_min": needed_min,
         "needed_max": needed_max,
-        # 推荐值优先覆盖保守上界，但绝不突破服务端允许的付费任务上限。
+        # The recommendation prefers the conservative upper bound but never exceeds the paid task
+        # limit allowed by the server.
         "recommended_count": min(needed_max, loomloom.MAX_VIDEO_SCENES),
     }
 
@@ -5178,7 +5289,7 @@ def _format_numeric_range(minimum, maximum, digits=1):
 
 
 def _selected_loomloom_video_model(capability):
-    """返回仍在当前 Profile 候选中的用户选择，不做静默回退。"""
+    """Return the user choice while it is still in the Profile; never fall back silently."""
     selected_model_id = str(
         st.session_state.get("loomloom_video_model_id", "") or ""
     ).strip()
@@ -5187,7 +5298,7 @@ def _selected_loomloom_video_model(capability):
 
 
 def _current_loomloom_video_quote_context(params):
-    """根据当前页面参数构建默认 SkillBot 的视频报价批次。"""
+    """Build the default SkillBot video quote batch from the current page parameters."""
     token = _effective_loomloom_api_token()
     fingerprint = _loomloom_video_account_signature(token) if token else ""
     capability = st.session_state.get("loomloom_video_capability")
@@ -5228,14 +5339,14 @@ def _current_loomloom_video_quote_context(params):
 
 
 def _retry_loomloom_video_quote():
-    """用户主动重试时解除失败锁；不沿用之前的付费确认。"""
+    """Clear the failure lock on an explicit retry; never reuse an earlier paid confirmation."""
     st.session_state["loomloom_video_quote_error_signature"] = ""
     st.session_state["loomloom_video_quote_error"] = ""
     st.session_state["loomloom_video_confirm_charge"] = False
 
 
 def _render_loomloom_video_settings(params):
-    """渲染默认视频 SkillBot 的报价、报价失效和付费确认流程。"""
+    """Render quote, invalidation and paid confirmation for the default video SkillBot."""
     st.caption(tr("Shengsuan Cloud AI Video Help"))
     if (
         str(
@@ -5272,8 +5383,9 @@ def _render_loomloom_video_settings(params):
 
         model_options = list(models_by_id)
         if selected_model_id not in models_by_id:
-            # 保留已失效的原选择，让用户明确看到状态并主动重选。直接把控件
-            # 改成新的默认模型会让旧报价与用户认知不一致。
+            # Keep the invalidated previous selection so the user can see the state and reselect.
+            # Switching the widget to the new default model would leave the old quote inconsistent
+            # with what the user believes.
             model_options.insert(0, selected_model_id)
 
         selected_model_id = stable_selectbox(
@@ -5315,8 +5427,9 @@ def _render_loomloom_video_settings(params):
         coverage_plan is not None
         and pending_autofill_digest == coverage_plan["script_digest"]
     ):
-        # 只在“刚生成文案”或“刚取得完整试听真实时长”时推荐一次。
-        # 消费标记后不再覆盖，用户随后手动调整段数会被完整保留。
+        # Recommend only once: right after the script was generated or right after the real duration
+        # of a full preview became available. Once the marker is consumed nothing overwrites the
+        # user's later manual segment adjustment.
         st.session_state["loomloom_video_scene_count"] = coverage_plan[
             "recommended_count"
         ]
@@ -5371,13 +5484,15 @@ def _render_loomloom_video_settings(params):
         and quoted_batch is not None
         and st.session_state.get("loomloom_video_input_signature") == input_signature
     )
-    # 同一组参数失败后暂停自动请求，避免普通页面交互反复等待服务超时。
-    # 签名包含账号、端点与全部计费输入；参数变化或用户主动重试后再询价。
+    # Stop automatic requests after the same parameter set fails so ordinary page interaction does
+    # not repeatedly wait for a service timeout. The signature covers account, endpoint and all
+    # billing inputs; quote again only after a parameter change or an explicit retry.
     if st.session_state.get("loomloom_video_quote_error_signature") != input_signature:
         st.session_state["loomloom_video_quote_error_signature"] = ""
         st.session_state["loomloom_video_quote_error"] = ""
     quote_failed = bool(st.session_state.get("loomloom_video_quote_error"))
-    # Quote 不创建付费任务，真正执行仍需用户明确勾选确认。
+    # A quote does not create a paid task; execution still requires an explicit confirmation
+    # checkbox.
     if (token and batch is not None and not quote_is_current and not quote_failed
             and not _generation_is_busy(_current_generation_task_id())):
         st.session_state["loomloom_video_confirm_charge"] = False
@@ -5467,7 +5582,7 @@ def _loomloom_script_signature(
 
 
 def _render_local_script_generation(params):
-    """保留 MoneyPrinterTurbo 原有的本地 LLM 脚本生成路径。"""
+    """Keep the original local LLM script-generation path of MoneyPrinterTurbo."""
     if not st.button(
         tr("Generate Video Script and Keywords"),
         key="auto_generate_script",
@@ -5560,7 +5675,8 @@ def _render_loomloom_candidates():
     ):
         st.session_state["video_script"] = selected.script
         st.session_state["video_terms"] = ", ".join(selected.video_terms)
-        # 与普通大模型生成文案保持一致：应用新候选后仅推荐一次素材数量。
+        # Consistent with normal LLM script generation: recommend the material count only once after
+        # a new candidate is applied.
         st.session_state["loomloom_video_scene_autofill_digest"] = (
             hashlib.sha256(selected.script.strip().encode("utf-8")).hexdigest()
         )
@@ -5568,7 +5684,7 @@ def _render_loomloom_candidates():
 
 
 def _handle_loomloom_poll_error(run_id, exc):
-    """对脚本任务轮询错误做有限退避，确定性错误立即停止轮询。"""
+    """Back off a bounded number of times on polling errors; stop at once if deterministic."""
     logger.warning(f"failed to poll LoomLoom run: run_id={run_id}, error={exc}")
     failure_count = int(st.session_state.get("loomloom_poll_failure_count", 0) or 0) + 1
     retryable = isinstance(exc, loomloom.LoomLoomAPIError) and exc.retryable
@@ -5576,8 +5692,9 @@ def _handle_loomloom_poll_error(run_id, exc):
         st.session_state["loomloom_run_error"] = str(exc)
         st.session_state["loomloom_poll_failure_count"] = 0
         st.session_state["loomloom_poll_retry_after"] = 0.0
-        # 查询失败不等于远端付费任务失败。保留 run_id 并暂停自动轮询，让用户
-        # 可以继续查询同一个任务；如果直接丢弃 ID 后重新提交，可能重复付费。
+        # A failed query does not mean the remote paid task failed. Keep the run_id and pause
+        # automatic polling so the user can query the same task again; dropping the ID and
+        # resubmitting could pay twice.
         st.session_state["loomloom_poll_paused"] = True
         st.rerun(scope="app")
         return
@@ -5780,8 +5897,9 @@ def _render_loomloom_script_generation(params):
                 st.session_state["loomloom_run_id"] = execution.run_id
                 st.session_state["loomloom_run_status"] = "running"
                 st.session_state["loomloom_poll_paused"] = False
-                # 一次报价只允许启动一次付费批次。后台状态只依赖 run_id，提交
-                # 后即可丢弃报价与幂等请求 ID；失败后用户需要重新报价再重试。
+                # One quote may start only one paid batch. The background state only depends on
+                # run_id, so the quote and the idempotent request ID can be discarded after
+                # submission; after a failure the user has to quote again before retrying.
                 st.session_state["loomloom_script_batch"] = None
                 st.session_state["loomloom_script_quote"] = None
                 st.session_state["loomloom_script_input_signature"] = ""
@@ -5816,27 +5934,30 @@ def _render_loomloom_script_generation(params):
             type="secondary",
             help=tr("Stop Tracking LoomLoom Run Help"),
         ):
-            # 这里只停止本地状态查询，不声称取消远端执行。用户确认放弃跟踪后
-            # 才清理 run_id，下一次付费运行仍需重新报价和确认。
+            # This only stops the local state query and does not claim to cancel remote execution.
+            # The run_id is cleared only after the user explicitly gives up tracking; the next paid
+            # run still needs a fresh quote and confirmation.
             st.session_state["loomloom_run_id"] = ""
             st.session_state["loomloom_run_error"] = ""
             st.session_state["loomloom_poll_paused"] = False
             st.rerun(scope="app")
-    # 只有真实运行中的批次才启动两秒轮询，报价阶段和结果展示阶段不创建
-    # 定时 fragment，避免用户停留在页面时产生无意义的网络请求和 rerun。
+    # Only a genuinely running batch starts the two-second polling; the quote stage and the result
+    # display stage create no periodic fragment so a user staying on the page does not generate
+    # pointless network requests and reruns.
     if run_id and not st.session_state.get("loomloom_poll_paused", False):
         _render_loomloom_run_progress()
     _render_loomloom_candidates()
 
 
 def _render_script_settings(panel, params):
-    """渲染文案设置并更新生成参数。"""
+    """Render the script settings and update the generation parameters."""
     with panel:
         with st.container(border=True):
             st.write(tr("Video Script Settings"))
-            # 标签行需要容纳“配置大模型”入口，因此无法继续使用 text_area
-            # 内置标签。把标签和输入框收进同一个字段容器后，可覆盖内部间距，
-            # 同时让该字段与页面上的其它表单控件保持一致的外部节奏。
+            # The label row has to host the "configure LLM" entry, so the built-in text_area label
+            # cannot be used. Putting the label and the input into one field container allows
+            # overriding the internal spacing while keeping the same outer rhythm as the other form
+            # widgets on the page.
             with st.container(key="video_subject_field"):
                 with st.container(
                     key="video_subject_label_row",
@@ -5886,8 +6007,9 @@ def _render_script_settings(panel, params):
             params.video_language = selected_language_code
             _set_runtime_config("ui", "video_language", params.video_language)
 
-            # 使用带 key 的局部容器限定折叠入口样式，保持 expander 的原生交互，
-            # 同时避免样式误伤页面顶部的“基础设置”等其他折叠区域。
+            # Use a keyed local container to scope the collapse-entry styling, keeping the
+            # expander's native behavior and preventing the style from leaking into other
+            # collapsible areas such as the "basic settings" at the top of the page.
             with st.container(key="advanced_settings_script"):
                 with st.expander(tr("Advanced Script Settings"), expanded=False):
                     script_backend_options = ["local", "loomloom"]
@@ -5940,8 +6062,10 @@ def _render_script_settings(panel, params):
                         max_chars=llm.MAX_SCRIPT_SYSTEM_PROMPT_LENGTH,
                         key="custom_system_prompt",
                     ).strip()
-                    # 默认内容由服务层统一维护。界面虽然直接展示默认提示词，但只有
-                    # 用户实际修改后才随任务传递，避免历史任务固化旧版本默认规则。
+                    # The default content is maintained by the service layer. The UI shows the
+                    # default prompt directly, but it is only sent with the task after the user
+                    # actually edits it, so historical tasks do not freeze an old version of the
+                    # default rules.
                     params.custom_system_prompt = (
                         ""
                         if system_prompt == llm.DEFAULT_SCRIPT_SYSTEM_PROMPT.strip()
@@ -5976,7 +6100,8 @@ def _render_script_settings(panel, params):
                             )
                         )
 
-            # 模型发现只增强视频素材，不改变用户明确选择的文案 Provider。
+            # Model discovery only enhances video materials; it never changes the script provider
+            # the user selected explicitly.
             if _effective_script_generation_backend() == "loomloom":
                 _render_loomloom_script_generation(params)
             else:
@@ -5997,7 +6122,8 @@ def _render_script_settings(panel, params):
                 icon=":material/auto_awesome:",
             ):
                 if not params.video_script:
-                    # 视频关键词需要基于文案提取，文案为空时提前提示并跳过模型调用。
+                    # Video keywords are extracted from the script, so warn early and skip the model
+                    # call when the script is empty.
                     st.toast(tr("Please Enter the Video Subject"))
                     st.warning(tr("Please Enter the Video Subject"))
                 else:
@@ -6025,7 +6151,7 @@ def _render_script_settings(panel, params):
 
 
 def _render_video_settings(panel, params):
-    """渲染视频设置并返回本次选择的本地素材。"""
+    """Render the video settings and return the local materials chosen this time."""
     uploaded_files = []
     with panel:
         with st.container(border=True):
@@ -6072,8 +6198,9 @@ def _render_video_settings(panel, params):
 
             loomloom_video_capability = None
             if params.video_source == "loomloom":
-                # 尽早读取缓存，使下方画面比例控件直接受当前 Profile 约束。
-                # 首次输入 Key 后 Streamlit 会 rerun，此处随即加载一次。
+                # Read the cache as early as possible so the aspect-ratio widget below is directly
+                # constrained by the current Profile. Streamlit reruns after the key is entered for
+                # the first time and the data is loaded right here.
                 loomloom_video_capability = _load_loomloom_video_capability(
                     _effective_loomloom_api_token()
                 )
@@ -6099,7 +6226,8 @@ def _render_video_settings(panel, params):
             if params.video_source == "muapi":
                 st.caption(tr("MuAPI AI Video Help"))
             if params.video_source == "local":
-                # Streamlit 的文件类型校验对扩展名大小写敏感，这里同时放行大小写两种形式。
+                # Streamlit's file type check is case-sensitive on extensions, so both upper and
+                # lower case forms are allowed here.
                 local_file_types = sorted(
                     extension.removeprefix(".")
                     for extension in LOCAL_MATERIAL_EXTENSIONS
@@ -6112,9 +6240,11 @@ def _render_video_settings(panel, params):
                     key="local_video_materials_uploader",
                 )
 
-            # 文案顺序匹配会从关键词生成到最终合成全程保持叙事顺序，因此开启时
-            # 顺序拼接是唯一符合实际执行逻辑的选项。同步控件值可避免界面仍显示
-            # “随机拼接”，同时保留用户原选择，关闭后自动恢复。
+            # Script-order matching keeps the narrative order from keyword generation through final
+            # composition, so sequential concatenation is the only option that matches actual
+            # execution while it is on. Syncing the widget value avoids still showing "random
+            # concatenation" while the user's own choice is kept and restored once the feature is
+            # turned off.
             sync_script_order_concat_mode()
             selected_concat_mode = stable_selectbox(
                 tr("Video Concat Mode"),
@@ -6143,14 +6273,15 @@ def _render_video_settings(panel, params):
                 "match_materials_to_script",
                 params.match_materials_to_script,
             )
-            # 顺序匹配开启时，sequential 是派生出的强制值，不应覆盖用户在关闭
-            # 该功能时选择的拼接偏好；关闭后仍能恢复此前的 random/sequential。
+            # While order matching is on, sequential is a derived forced value and must not
+            # overwrite the concatenation preference the user chose when the feature is off;
+            # disabling it restores the previous random/sequential choice.
             if not params.match_materials_to_script:
                 _set_runtime_config(
                     "ui", "video_concat_mode", params.video_concat_mode.value
                 )
 
-            # 视频转场模式
+            # Video transition mode
             video_transition_modes = [
                 (tr("None"), VideoTransitionMode.none.value),
                 (tr("Shuffle"), VideoTransitionMode.shuffle.value),
@@ -6191,12 +6322,14 @@ def _render_video_settings(panel, params):
                     (ratio_labels[value], value)
                     for value in loomloom_video_capability.aspect_ratios
                 ]
-            # Coverr 库 99% 是 16:9 横屏,默认竖屏会让画面被大量黑边包围。
-            # 用 source-specific widget key 让每个 source 各自记忆 aspect 选择:
-            #   - 首次切到 coverr → 默认 Landscape(index=1)
-            #   - 其他 source 沿用 Portrait(index=0)
-            #   - 用户在某 source 下手动改过 aspect,session_state 会记住,
-            #     下次回到同一 source 时尊重用户选择,不会再被强制覆盖。
+            # The Coverr library is 99% 16:9 landscape, so a portrait default would surround the
+            # picture with large black bars. A source-specific widget key lets each source remember
+            # its own aspect choice:
+            #   - first switch to coverr -> default Landscape(index=1)
+            #   - other sources keep Portrait(index=0)
+            #   - if the user changed the aspect manually under a source, session_state remembers it
+            #     and the choice is respected the next time that source is selected instead of being
+            #     forced again.
             default_aspect_index = 1 if params.video_source == "coverr" else 0
             video_aspect_values = [value for _, value in video_aspect_ratios]
             video_aspect_config_key = f"video_aspect_{params.video_source}"
@@ -6252,8 +6385,9 @@ def _render_video_settings(panel, params):
                         options=list(image_motion_labels),
                         default_value=_saved_ui_choice(
                             "image_motion", list(image_motion_labels), ImageMotion.zoom.value,
-                            # 生成任务持锁时，切换语言或素材来源会重建控件；
-                            # 此时必须恢复尚未落盘的最新选择，不能写回旧配置值。
+                            # Widgets are rebuilt when the language or the material source changes
+                            # while a generation job holds the lock; the latest unsaved choice must
+                            # be restored, not the stale config value.
                             section=config.snapshot_config_with_pending(config.ui),
                         ),
                         key="image_motion_select",
@@ -6263,10 +6397,12 @@ def _render_video_settings(panel, params):
                 )
                 _set_runtime_config("ui", "image_motion", params.image_motion.value)
 
-            # MiniMax H3 的远端时长范围是 4～15 秒。选择秘塔时使用完整能力
-            # 范围，既避免 2/3 秒被按 4 秒计费，也让 WebUI 与 CLI、服务层一致。
+            # The remote duration range of MiniMax H3 is 4 to 15 seconds. Using the full capability
+            # range with Metaso avoids billing 2/3 second clips as 4 seconds and keeps the WebUI
+            # consistent with the CLI and the service layer.
             if params.video_source == "infistar":
-                # 每种模型先提供实测的固定规格；不把被 API 拒绝的时长发往付费接口。
+                # Each model first offers its measured fixed presets; durations rejected by the API
+                # are never sent to a paid interface.
                 video_clip_durations = [infistar_video.MODELS.get(selected_infistar_model, {"seconds": 5})["seconds"]]
             elif params.video_source == "metaso_minimax":
                 video_clip_durations = list(
@@ -6301,9 +6437,9 @@ def _render_video_settings(panel, params):
                 "ui", "video_clip_duration", params.video_clip_duration
             )
             clip_speed_key = localized_widget_key("video_clip_speed_slider")
-            # session_state 可能来自旧任务、API 参数或旧版页面状态。控件创建前
-            # 统一归一化，既保留合法选择，也确保 slider 始终收到 0.5～2.0
-            # 范围内的有限浮点数。
+            # session_state may come from an old task, API parameters or an old page state.
+            # Normalize before the widget is created so valid choices are kept while the slider
+            # always receives a finite float within 0.5-2.0.
             st.session_state[clip_speed_key] = utils.normalize_clip_speed(
                 st.session_state.get(
                     clip_speed_key,
@@ -6345,8 +6481,9 @@ def _render_video_settings(panel, params):
             )
             saved_video_codec_values = [item[1] for item in video_codec_options]
             if saved_video_codec not in saved_video_codec_values:
-                # 旧版本或手工配置可能留下无效值。UI 回到“默认”而不是替用户
-                # 固定某个编码器，后端仍会按稳定策略解析为 libx264。
+                # Old versions or hand-written config may leave invalid values. The UI falls back to
+                # "Default" instead of pinning an encoder for the user; the backend still resolves
+                # the stable policy to libx264.
                 saved_video_codec = DEFAULT_VIDEO_CODEC_OPTION
             selected_video_codec = stable_selectbox(
                 tr("Video Encoder"),
@@ -6359,7 +6496,8 @@ def _render_video_settings(panel, params):
                 help=tr("Video Encoder Help"),
             )
             if selected_video_codec == DEFAULT_VIDEO_CODEC_OPTION:
-                # 默认模式不持久化具体编码器，让配置表达“跟随项目默认值”。
+                # Default mode does not persist a concrete encoder, so config expresses "follow the
+                # project default".
                 _delete_runtime_config("app", "video_codec")
             else:
                 _set_runtime_config("app", "video_codec", selected_video_codec)
@@ -6417,12 +6555,14 @@ def _render_video_settings(panel, params):
 
 def _render_wavespeed_video_settings(params):
     """
-    渲染 WaveSpeed 生成数量估算与计费确认。
+    Render the WaveSpeed generation-count estimate and the billing confirmation.
 
-    生成按条计费，提交前必须让用户看到大致会生成多少段。估算完全在本地
-    完成：用配音时长估算区间除以片段时长得到需要覆盖的片段数。素材流程
-    本身按需逐段生成、凑够所需时长即停，因此实际生成数以运行时为准，
-    估算只用于量级提示，不参与任务执行。
+    Generation is billed per clip, so the user must see roughly how many segments will be created
+    before submitting. The estimate is computed locally: the voiceover duration range is divided by
+    the clip duration to get the number of clips needed to cover it. The material flow itself
+    generates one segment at a time on demand and stops once the required duration is covered, so
+    the real count is decided at runtime and the estimate is only a magnitude hint that never takes
+    part in task execution.
     """
     clip_duration = max(int(params.video_clip_duration or 1), 1)
     video_count = max(int(params.video_count or 1), 1)
@@ -6448,7 +6588,7 @@ def _render_wavespeed_video_settings(params):
 
 
 def _render_seedance_video_settings(params):
-    """展示预计付费任务数量，并要求用户明确确认方舟生成费用。"""
+    """Show the expected paid task count and require explicit Ark generation fee confirmation."""
     clip_duration = max(int(params.video_clip_duration or 1), 1)
     video_count = max(int(params.video_count or 1), 1)
     estimated_range = _estimate_voiceover_duration_range(
@@ -6474,7 +6614,7 @@ def _render_seedance_video_settings(params):
 
 
 def _render_jalapeno_provider_settings():
-    """默认值直接填入；独立视频配置不依赖当前选择的大模型 Provider。"""
+    """Fill defaults directly; standalone video config ignores the selected LLM provider."""
     snapshot = config.snapshot_config_with_pending(config.app)
     st.markdown(f"**{tr('Jalapeno Cloud AI Video')}**")
     key = st.text_input(
@@ -6552,7 +6692,7 @@ def _render_jalapeno_provider_settings():
 
 
 def _sync_jalapeno_charge_confirmation(params):
-    """接入地址、模型、规格或有效 Key 变化后重新确认，避免沿用过期授权。"""
+    """Re-confirm after endpoint, model, spec or effective key changes; no stale approval."""
     snapshot = config.snapshot_config_with_pending(config.app)
     signature = _jalapeno_charge_signature(params, snapshot)
     if st.session_state.get("jalapeno_charge_signature") != signature:
@@ -6561,7 +6701,7 @@ def _sync_jalapeno_charge_confirmation(params):
 
 
 def _jalapeno_charge_signature(params, snapshot):
-    """使用同一快照检查费用确认，避免渲染与点击提交之间读取不同配置。"""
+    """Check the fee confirmation against one snapshot so render and submit see the same config."""
     return hashlib.sha256(json.dumps([
         jalapeno_video.get_api_key(snapshot),
         snapshot.get("jalapeno_video_base_url", ""),
@@ -6572,7 +6712,7 @@ def _jalapeno_charge_signature(params, snapshot):
 
 
 def _render_infistar_model_selector():
-    """模型顺序固定为 Seedance、MiniMax、可灵；切换模型后重新确认费用。"""
+    """Fixed model order Seedance, MiniMax, Kling; confirm the fee again after a switch."""
     snapshot = config.snapshot_config_with_pending(config.app)
     configured = str(snapshot.get("infistar_video_model", "") or infistar_video.DEFAULT_MODEL)
     options = list(infistar_video.MODELS)
@@ -6597,7 +6737,7 @@ def _render_infistar_model_selector():
 
 
 def _render_ofox_video_settings(params):
-    """展示预计付费任务数量，并要求用户明确确认 OFox 生成费用。"""
+    """Show the expected paid task count and require explicit OFox generation fee confirmation."""
     clip_duration = max(int(params.video_clip_duration or 1), 1)
     video_count = max(int(params.video_count or 1), 1)
     estimated_range = _estimate_voiceover_duration_range(
@@ -6621,7 +6761,7 @@ def _render_ofox_video_settings(params):
 
 
 def _render_metaso_minimax_video_settings(params):
-    """展示预计付费任务数量，并要求用户确认秘塔 MiniMax 生成费用。"""
+    """Show the expected paid task count and require confirmation of Metaso MiniMax fees."""
     clip_duration = max(int(params.video_clip_duration or 1), 1)
     video_count = max(int(params.video_count or 1), 1)
     voice_mode = st.session_state.get(
@@ -6629,9 +6769,11 @@ def _render_metaso_minimax_video_settings(params):
         config.ui.get("voice_mode"),
     )
     if voice_mode == VOICE_MODE_UPLOAD:
-        # 视频设置渲染在音频设置之前，此时无法可靠读取本轮新上传文件的实际
-        # 时长。上传模式不再展示按脚本文字推算的数字，避免用户误以为一个
-        # 5 秒音频也会按较长文案创建多个付费任务；运行时仍以文件真实时长为准。
+        # The video settings render before the audio settings, so the real duration of a file
+        # uploaded in this run cannot be read reliably yet. Upload mode no longer shows a number
+        # derived from the script text, which kept users from thinking a 5-second audio would still
+        # create several paid tasks for a long script; the runtime still uses the real file
+        # duration.
         st.warning(
             tr("Metaso MiniMax Billing Notice Uploaded Audio").format(
                 resolution=str(
@@ -6701,12 +6843,13 @@ def _estimate_voiceover_duration_range(
     text: str, voice_rate: float
 ) -> tuple[float, float] | None:
     """
-    在本地估算完整配音时长，返回保守的上下界秒数。
+    Estimate the full voiceover duration locally, returning conservative bounds in seconds.
 
-    该估算只用于帮助用户在调用付费 TTS 前判断文案量级，不参与任务执行。
-    中文、日文和韩文按字符速度估算，其它使用空格分词的语言按单词速度估算，
-    再计入常见标点停顿。不同 Provider、音色和语气会造成实际偏差，因此界面
-    必须展示区间而不是伪精确的单一结果。
+    The estimate only helps users judge the script size before calling a paid TTS service and never
+    takes part in task execution. Chinese, Japanese and Korean are estimated by character rate,
+    other space-delimited languages by word rate, plus a pause allowance for common punctuation.
+    Providers, voices and speaking styles introduce real deviation, so the UI must show a range
+    instead of a falsely precise single number.
     """
     normalized_text = re.sub(r"\s+", " ", str(text or "")).strip()
     if not normalized_text:
@@ -6724,9 +6867,10 @@ def _estimate_voiceover_duration_range(
     words = re.findall(r"\b[\w]+(?:[-'’][\w]+)*\b", remaining_text, re.UNICODE)
     punctuation_count = len(re.findall(r"[,，.。!?！？;；:：]", normalized_text))
 
-    # 4.2 字/秒和 2.6 词/秒接近日常解说语速；标点按 0.12 秒加入轻微停顿。
-    # voice_rate 只作为估算修正项。部分生成式 TTS 不严格执行倍率，所以最终
-    # 仍保留 ±15% 区间，避免让用户误以为该值等同于服务端真实结果。
+    # 4.2 characters/second and 2.6 words/second are close to everyday narration speed; each
+    # punctuation mark adds a 0.12 second pause. voice_rate only adjusts the estimate. Some
+    # generative TTS services do not strictly honor the multiplier, so a ±15% range is kept to avoid
+    # implying that the value equals the real server result.
     base_seconds = len(script_chars) / 4.2 + len(words) / 2.6 + punctuation_count * 0.12
     if base_seconds <= 0:
         return None
@@ -6740,9 +6884,10 @@ def _estimate_voiceover_duration_range(
 
 
 def _get_voice_preview_sample(voice_name: str) -> str:
-    """返回适合当前音色的短试听文案，不使用用户的完整视频文案。"""
-    # ElevenLabs 音色缺少明确语言字段时，根据展示名称中的越南语字符选择
-    # 试听文案，避免用明显不匹配的语言判断音色效果。
+    """Return a short preview line suited to the voice, not the user's full video script."""
+    # When an ElevenLabs voice has no explicit language field, pick the preview text from Vietnamese
+    # characters in the display name so the voice is not judged with an obviously mismatched
+    # language.
     if voice.is_elevenlabs_voice(voice_name):
         parts = voice_name.split(":", 2)
         display = parts[2] if len(parts) >= 3 else ""
@@ -6762,7 +6907,7 @@ def _voice_preview_fingerprint(
     voice_volume: float,
     provider_signature: dict,
 ) -> str:
-    """生成试听缓存指纹，任一配音参数变化后自动让旧试听结果失效。"""
+    """Build the preview fingerprint so any voiceover parameter change invalidates cache."""
     payload = {
         "preview_type": preview_type,
         "content": content,
@@ -6778,10 +6923,11 @@ def _voice_preview_fingerprint(
 
 def _credential_signature(value: str) -> str:
     """
-    生成只用于缓存失效判断的凭证摘要。
+    Build a credential digest used only for cache invalidation.
 
-    摘要不会写入配置、日志或任务文件。用户修改 API Key 后摘要会变化，从而
-    强制重新调用当前配音服务，避免旧试听缓存让无效的新凭证看起来可用。
+    The digest is never written to config, logs or task files. It changes when the user edits the
+    API Key, forcing a fresh call to the current voice service so a stale preview cache cannot make
+    an invalid new credential look usable.
     """
     normalized_value = str(value or "")
     if not normalized_value:
@@ -7012,11 +7158,12 @@ def _sync_voxcpm_prompt_audio(uploaded_file) -> bytes | None:
 
 def _get_voice_preview_provider_signature(tts_server: str) -> dict:
     """
-    返回会影响试听结果的非敏感 Provider 配置。
+    Return the non-sensitive provider settings that affect the preview result.
 
-    API Key 只以单向摘要参与缓存指纹，原始凭证不会进入缓存或日志。模型、
-    服务地址、区域或凭证发生变化时都必须重新生成试听，否则界面可能继续播放
-    旧 Provider 配置下的音频，让用户误判当前设置已经生效。
+    The API Key only takes part in the cache fingerprint as a one-way digest; the raw credential
+    never enters the cache or logs. A change of model, service address, region or credential must
+    always regenerate the preview, otherwise the UI could keep playing audio from the old provider
+    config and let users wrongly believe their current settings are active.
     """
     if tts_server == "azure-tts-v2":
         return {
@@ -7086,7 +7233,7 @@ def _synthesize_voice_preview(
     voxcpm_prompt_audio: bytes | None = None,
     voxcpm_prompt_text: str = "",
 ) -> dict | None:
-    """生成一次试听并转为内存缓存，临时文件不会跨会话长期保留。"""
+    """Synthesize one preview into the in-memory cache; temp files do not outlive the run."""
     if selected_tts_server == "chatterbox":
         _sync_chatterbox_config_from_session_state()
     if selected_tts_server == "kokoro":
@@ -7144,29 +7291,31 @@ def _synthesize_voice_preview(
             "duration": duration,
             "preview_type": preview_type,
             "sub_maker": sub_maker,
-            # 让位于音频面板之前的视频面板只采用与当前设置完全匹配的
-            # 完整试听时长；短试听或旧文案绝不能改变推荐素材数。
+            # Let the video panel, which renders before the audio panel, use only the full preview
+            # duration that exactly matches the current settings; short previews or old scripts must
+            # never change the recommended material count.
             "content_digest": hashlib.sha256(content.encode("utf-8")).hexdigest(),
             "tts_server": selected_tts_server,
             "voice_name": voice_name,
             "voice_rate": float(voice_rate),
         }
     finally:
-        # 浏览器播放器使用内存字节，文件读取完即可清理，避免频繁试听积累临时文件。
+        # The browser player uses the in-memory bytes, so the file can be removed once it has been
+        # read, avoiding temporary files piling up from frequent previews.
         try:
             os.remove(audio_file)
         except FileNotFoundError:
             pass
         except OSError as exc:
-            # 清理失败不应覆盖真正的 TTS 响应或异常，但需要保留路径和系统错误，
-            # 方便排查权限、只读文件系统等环境问题。
+            # A cleanup failure must not mask the real TTS response or exception, but the path and
+            # system error are kept to diagnose permission or read-only filesystem problems.
             logger.warning(
                 f"failed to delete voice preview file {audio_file}: {str(exc)}"
             )
 
 
 def _render_voice_preview(params, friendly_names, selected_tts_server, voice_name):
-    """渲染低成本短试听、完整文案时长估算和按需完整配音预览。"""
+    """Render the short preview, the full-script duration estimate and the full preview."""
     if not friendly_names:
         return
 
@@ -7290,8 +7439,9 @@ def _render_voice_preview(params, friendly_names, selected_tts_server, voice_nam
                         and math.isfinite(preview_result["duration"])
                         and preview_result["duration"] > 0
                     ):
-                        # 视频设置先于音频设置渲染。完整试听成功后触发一次 rerun，
-                        # 让上方素材数立刻按真实旁白时长重新推荐并刷新覆盖提示。
+                        # The video settings render before the audio settings. A successful full
+                        # preview triggers one rerun so the material count above re-recommends from
+                        # the real narration duration and refreshes the coverage hint immediately.
                         st.session_state["loomloom_video_scene_autofill_digest"] = (
                             preview_result["content_digest"]
                         )
@@ -7306,10 +7456,10 @@ def _render_voice_preview(params, friendly_names, selected_tts_server, voice_nam
         and cached_preview.get("fingerprint") in valid_fingerprints
         and cached_preview.get("audio_bytes")
     ):
-        # 只在用户本次明确点击“试听音色”时自动播放。Streamlit 的其它控件
-        # 也会触发页面 rerun；如果对缓存音频永久开启 autoplay，修改任意设置
-        # 都可能让旧试听从头播放。完整试听继续保留手动播放，避免较长音频在
-        # 生成完成后意外打断用户。
+        # Autoplay only when the user explicitly clicked "preview voice" in this run. Other
+        # Streamlit widgets also trigger reruns; if autoplay stayed on for cached audio, changing
+        # any setting could replay the old preview from the start. The full preview stays manual so
+        # longer audio does not unexpectedly interrupt the user after generation completes.
         should_autoplay = bool(
             short_preview_requested
             and cached_preview.get("preview_type") == "sample"
@@ -7332,12 +7482,13 @@ def _render_voice_preview(params, friendly_names, selected_tts_server, voice_nam
 
 def _get_reusable_full_voice_preview(params, voice_mode: str) -> dict | None:
     """
-    返回与当前生成参数完全匹配的完整试听缓存。
+    Return the full preview cache that matches the current generation parameters.
 
-    只复用完整文案试听，短音色样例永远不能进入正式任务。指纹统一覆盖文案、
-    Provider、音色、语速、音量和非敏感配置摘要；任何参数变化都会自然回退到
-    正常 TTS 流程。字幕时间轴和有效时长同样是必需条件，避免只复用音频后让
-    Edge 字幕链路失去 SubMaker。
+    Only full-script previews are reused; short voice samples can never enter a real task. The
+    fingerprint covers script, provider, voice, speech rate, volume and the non-sensitive config
+    digest; any parameter change falls back naturally to the normal TTS flow. Subtitle timeline and
+    effective duration are required too, so the Edge subtitle pipeline never loses its SubMaker by
+    reusing audio alone.
     """
     if voice_mode != VOICE_MODE_TTS:
         return None
@@ -7347,9 +7498,10 @@ def _get_reusable_full_voice_preview(params, voice_mode: str) -> dict | None:
     if (
         not script_content
         or not params.voice_name
-        # 正式视频会在 MoviePy 合成阶段统一应用配音音量；部分 Provider 又会
-        # 在 TTS 阶段直接写入音量增益。非默认音量下复用试听可能造成二次增益，
-        # 因此先保守回退原流程，避免为少量场景引入 Provider 特判。
+        # The final video applies the voiceover volume uniformly during MoviePy composition, and
+        # some providers also bake volume gain in during TTS. Reusing a preview at non-default
+        # volume could apply the gain twice, so the original flow is used conservatively instead of
+        # adding provider special cases.
         or not math.isclose(float(params.voice_volume), 1.0)
     ):
         return None
@@ -7395,10 +7547,11 @@ def _get_reusable_full_voice_preview(params, voice_mode: str) -> dict | None:
 
 def _sync_minimax_tts_api_key_input():
     """
-    同步 MiniMax TTS 密码控件，并返回当前有效 Key。
+    Sync the MiniMax TTS password widget and return the current effective key.
 
-    TTS 专用 Key 为空时允许复用 MiniMax LLM Key。共享 Key 只用于当前控件和
-    请求，不自动复制到 [minimax_tts]，避免同一凭证在配置文件中重复维护。
+    When the dedicated TTS key is empty the MiniMax LLM key may be reused. The shared key is only
+    used for the current widget and requests and is never copied into [minimax_tts] automatically,
+    so one credential is not maintained twice in the config file.
     """
     widget_key = "minimax_tts_api_key_input"
     configured_key = str(config.minimax_tts.get("api_key", "") or "").strip()
@@ -7410,8 +7563,9 @@ def _sync_minimax_tts_api_key_input():
     entered_key = str(st.session_state.get(widget_key, "") or "").strip()
 
     if not entered_key and effective_key:
-        # 浏览器重连可能重放空密码状态。恢复已配置凭证，防止空值覆盖配置，
-        # 同时确保当前 rerun 的试听请求可以直接使用有效 Key。
+        # A browser reconnect may replay an empty password state. Restore the configured credential
+        # so an empty value never overwrites the config, and so the preview request of this rerun
+        # can use a valid key directly.
         st.session_state[widget_key] = effective_key
         entered_key = effective_key
         if had_widget_state:
@@ -7427,7 +7581,7 @@ def _sync_minimax_tts_api_key_input():
 
 
 def _get_cached_minimax_voices(api_key: str, endpoint: str) -> list[dict[str, str]]:
-    """按站点和凭证摘要读取当前会话中的 MiniMax 音色查询结果。"""
+    """Read the MiniMax voice lookup result of the current session by site and key digest."""
     cache = st.session_state.get("minimax_tts_voice_catalog_cache", {})
     cache_key = f"{endpoint}|{_credential_signature(api_key)}"
     cached_voices = cache.get(cache_key, [])
@@ -7439,14 +7593,14 @@ def _cache_minimax_voices(
     endpoint: str,
     voices: list[dict[str, str]],
 ):
-    """缓存主动查询到的音色，避免普通控件 rerun 后重复请求 MiniMax。"""
+    """Cache a voice list fetched on demand so ordinary widget reruns do not call MiniMax again."""
     cache = st.session_state.setdefault("minimax_tts_voice_catalog_cache", {})
     cache_key = f"{endpoint}|{_credential_signature(api_key)}"
     cache[cache_key] = voices
 
 
 def _render_minimax_tts_settings() -> tuple[list[str], dict[str, str]]:
-    """渲染 MiniMax TTS 配置，并返回统一音色选择器使用的选项和文案。"""
+    """Render the MiniMax TTS settings and return the options and text for the voice selector."""
     effective_api_key = _sync_minimax_tts_api_key_input()
     effective_api_key = st.text_input(
         tr("MiniMax TTS API Key"),
@@ -7464,8 +7618,9 @@ def _render_minimax_tts_settings() -> tuple[list[str], dict[str, str]]:
         options=minimax_tts_endpoints,
         default_value=effective_endpoint,
         key="minimax_tts_endpoint_select",
-        # 复用 LLM Key 时必须跟随 LLM 所在区域，避免界面允许选择一个实际
-        # 不会生效的地址；填写独立 TTS Key 后即可单独选择站点。
+        # When reusing the LLM key the region must follow the LLM region, so the UI cannot offer an
+        # address that would not actually work; after entering a dedicated TTS key the site can be
+        # selected separately.
         disabled=not dedicated_key,
     )
     if dedicated_key:
@@ -7497,8 +7652,9 @@ def _render_minimax_tts_settings() -> tuple[list[str], dict[str, str]]:
                 voice_type="all",
             )
         except Exception as exc:
-            # 这里必须把异常暴露给用户并记录日志。账号区域不匹配、Key 权限不足
-            # 或网络失败都很常见，静默返回空列表会让用户误以为账号没有音色。
+            # The exception must be shown to the user and logged. Account-region mismatch,
+            # insufficient key permissions and network failures are common; silently returning an
+            # empty list would make users think their account has no voices.
             logger.warning(f"load MiniMax voices failed: {exc}")
             st.error(tr("MiniMax Voices Load Failed").format(error=str(exc)))
         else:
@@ -7526,20 +7682,24 @@ def _render_minimax_tts_settings() -> tuple[list[str], dict[str, str]]:
         or voice.MINIMAX_TTS_DEFAULT_VOICE
     ).strip()
     configured_voice = f"minimax:{configured_voice_id}"
-    # 尚未点击获取音色、接口暂时不可用或配置使用列表外克隆音色时，仍保留
-    # 当前 Voice ID，确保原有生成流程不依赖远端音色查询结果。
+    # When the voice list was not fetched yet, the API is temporarily unavailable, or the config
+    # uses a cloned voice outside the list, the current Voice ID is kept so the existing generation
+    # flow does not depend on the remote voice lookup.
     voice_labels.setdefault(configured_voice, configured_voice_id)
     return list(voice_labels), voice_labels
 
 
 def _sync_elevenlabs_api_key_input():
     """
-    同步 ElevenLabs 密码控件、持久化配置和环境变量，并返回当前有效 Key。
+    Sync the ElevenLabs password widget, persisted config and environment variable and return the
+    current effective key.
 
-    Streamlit 在浏览器标签页连接到重启后的服务时，可能重放一个空的密码控件
-    状态。这个空值无法与用户主动清空可靠区分，因此当配置文件或环境变量仍有
-    Key 时，优先恢复有效值，防止空状态覆盖配置并确保本次 rerun 能立即加载
-    音色。需要彻底删除 Key 时应修改配置文件或环境变量，避免重连误判。
+    When a browser tab reconnects to a restarted service, Streamlit may replay an empty password
+    widget state. That empty value cannot be reliably distinguished from a deliberate clear by the
+    user, so while the config file or environment variable still holds a key the valid value is
+    restored first: it stops the empty state from overwriting the config and lets this rerun load
+    the voices immediately. To remove a key entirely, edit the config file or environment variable
+    instead, avoiding a misjudgment on reconnect.
     """
     widget_key = "elevenlabs_api_key_input"
     configured_key = str(config.elevenlabs.get("api_key", "") or "").strip()
@@ -7549,20 +7709,23 @@ def _sync_elevenlabs_api_key_input():
     entered_key = str(st.session_state.get(widget_key, "") or "").strip()
 
     if not entered_key and effective_key:
-        # 重连后的空状态不能覆盖有效凭证，同时必须在渲染音色列表之前恢复，
-        # 否则配置文件虽然没有被清空，当前页面仍会使用空 Key 请求 ElevenLabs。
+        # An empty state after reconnect must not overwrite a valid credential and has to be
+        # restored before the voice list renders, otherwise the page keeps using an empty key
+        # against ElevenLabs even though the config file was not cleared.
         st.session_state[widget_key] = effective_key
         entered_key = effective_key
         if had_widget_state:
             logger.debug("restored ElevenLabs API key after empty session replay")
     elif not had_widget_state:
-        # 先初始化再创建控件，避免同时传 value 和 session_state 触发 Streamlit
-        # 的默认值冲突警告；没有任何 Key 时初始化为空即可。
+        # Initialize before creating the widget to avoid Streamlit's default value conflict warning
+        # from passing both value and session_state; with no key at all an empty initialization is
+        # enough.
         st.session_state[widget_key] = entered_key
 
     if entered_key and entered_key != effective_key:
-        # 用户主动输入的新值才落入 config.toml。环境变量作为有效值回填时不会
-        # 被复制到文件，容器或部署平台注入的密钥仍只保留在运行环境中。
+        # Only a value the user typed is written to config.toml. A value filled back from an
+        # environment variable is not copied into the file, so keys injected by a container or
+        # deployment platform stay in the runtime environment only.
         for cache_key in list(st.session_state.keys()):
             if str(cache_key).startswith("elevenlabs_voices_"):
                 del st.session_state[cache_key]
@@ -7572,15 +7735,16 @@ def _sync_elevenlabs_api_key_input():
 
 
 def _sync_voxcpm_api_key_input():
-    """恢复 VoxCPM 密码控件在重连时被 Streamlit 重放的空状态。"""
+    """Restore the VoxCPM password widget after Streamlit replays an empty reconnect state."""
     widget_key = "voxcpm_api_key_input"
     configured_key = str(config.voxcpm.get("api_key", "") or "").strip()
     had_widget_state = widget_key in st.session_state
     entered_key = str(st.session_state.get(widget_key, "") or "").strip()
 
     if not entered_key and configured_key:
-        # 浏览器重连可能重放空密码状态。保留已保存凭据，避免本次 rerun
-        # 通过 _set_runtime_config 把 config.toml 中的有效 Key 覆盖为空。
+        # A browser reconnect may replay an empty password state. Keep the saved credential so this
+        # rerun does not overwrite the valid key in config.toml with an empty value through
+        # _set_runtime_config.
         st.session_state[widget_key] = configured_key
         entered_key = configured_key
         if had_widget_state:
@@ -7593,11 +7757,12 @@ def _sync_voxcpm_api_key_input():
 
 def _render_elevenlabs_api_key_input(label_key):
     """
-    渲染 ElevenLabs TTS 与配乐共用的唯一 API Key 输入状态。
+    Render the single API Key input shared by ElevenLabs TTS and background music.
 
-    同一页面若为 TTS 和配乐分别使用两个 widget key，Streamlit 会各自保留旧值，
-    后渲染的输入框还会覆盖共享配置。这里统一使用一个 key，并集中处理环境变量
-    回填、配置更新和音色缓存失效，确保界面显示与后台任务始终读取同一个值。
+    If one page used two widget keys for TTS and background music, Streamlit would keep a separate
+    stale value in each and the later rendered input would overwrite the shared config. One key is
+    used here instead, with environment backfill, config updates and voice-cache invalidation
+    handled in one place so the UI and background tasks always read the same value.
     """
     _sync_elevenlabs_api_key_input()
     return st.text_input(
@@ -7608,7 +7773,7 @@ def _render_elevenlabs_api_key_input(label_key):
 
 
 def _render_background_music_settings(params, elevenlabs_api_key_rendered=False):
-    """渲染背景音乐来源与音量设置，并返回本次待保存的上传文件。"""
+    """Render the background music source and volume settings and return the file to save."""
     uploaded_bgm_file = None
     previous_bgm_type = st.session_state.get("last_rendered_bgm_type")
     st.divider()
@@ -7642,15 +7807,17 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
             type="password",
             key="sonilo_api_key_input",
         ).strip()
-        # 用户要求已配置的 Key 直接回填到密码输入框。配置值优先于环境变量；
-        # 仅当用户确实修改输入或本来就使用配置时写回，避免把环境变量中的 Key
-        # 在无操作的情况下复制进 config.toml。
+        # Users asked for a configured key to be filled straight into the password input. The config
+        # value wins over the environment variable; writing back only happens when the user really
+        # edits the input or was already using config, so an environment key is never copied into
+        # config.toml without an action.
         if configured_key or entered_key != effective_key:
             _set_runtime_config("app", "sonilo_api_key", entered_key)
     elif params.bgm_type == "elevenlabs":
         if elevenlabs_api_key_rendered:
-            # TTS 区域已经渲染共享输入框时不再创建第二个 widget，避免两个独立
-            # session_state 值互相覆盖。说明文字帮助用户定位上方的共用配置。
+            # When the TTS area already rendered the shared input, do not create a second widget so
+            # two independent session_state values cannot overwrite each other. The caption helps
+            # users find the shared settings above.
             st.caption(tr("ElevenLabs API Key Help"))
         else:
             _render_elevenlabs_api_key_input("ElevenLabs Music API Key")
@@ -7677,16 +7844,18 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
             accept_multiple_files=False,
             key="custom_bgm_uploader",
             help=tr("Upload Background Music Help"),
-            # Streamlit 默认会在控件上展示全局 200MB 上限。这里必须与服务层
-            # 30MB 硬限制保持一致，避免界面允许选择、提交时才被服务端拒绝。
+            # Streamlit shows its global 200MB limit on the widget by default. It has to match the
+            # 30MB hard limit of the service layer so the UI never allows a file that the server
+            # rejects only on submit.
             max_upload_size=bgm_service.MAX_BGM_UPLOAD_BYTES // (1024 * 1024),
         )
         if uploaded_bgm_file is not None and bgm_enabled:
             try:
                 safe_name = bgm_service.sanitize_upload_filename(uploaded_bgm_file.name)
-                # Streamlit 在调整音量等任意控件后都会重新执行页面。使用内容哈希
-                # 区分上传文件，并在当前会话内缓存完整解码结果，既不能只凭同名、
-                # 同大小文件误用旧结果，也避免每次 rerun 都重复调用 FFmpeg。
+                # Streamlit re-executes the page after any widget change, including the volume.
+                # Hashing the content distinguishes uploaded files and caches the full decode result
+                # within the session, so neither a same-named file of the same size reuses a stale
+                # result nor every rerun calls FFmpeg again.
                 validation_key = (
                     safe_name,
                     uploaded_bgm_file.size,
@@ -7707,8 +7876,9 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
                             "error": str(exc),
                             "error_type": "upload",
                         }
-                        # 同一个文件指纹的失败结果会进入会话缓存，因此这里只在
-                        # 首次真实执行校验时记录一次，避免普通控件 rerun 刷屏。
+                        # A failure result for the same file fingerprint enters the session cache,
+                        # so it is logged only when the check actually runs the first time, avoiding
+                        # log spam on ordinary widget reruns.
                         logger.warning(
                             "WebUI background music validation rejected: "
                             f"name={safe_name}, error={str(exc)}"
@@ -7736,17 +7906,19 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
                         raise bgm_service.BgmServiceError(cached_validation["error"])
                     raise bgm_service.BgmUploadError(cached_validation["error"])
             except bgm_service.BgmUploadError:
-                # 非法文件不能沿用上一次有效上传的名称，否则任务参数可能仍指向
-                # 历史 BGM。保留 UploadedFile 返回值，让用户点击生成时仍会被最终
-                # 服务端校验拦截，而不是静默生成一条没有背景音乐的视频。
+                # An invalid file must not inherit the name of the last valid upload, otherwise task
+                # parameters could still point at an older BGM. The UploadedFile is still returned
+                # so the final server-side validation blocks the user on generate instead of
+                # silently producing a video without background music.
                 params.bgm_file = ""
                 st.error(tr("Invalid Background Music"))
             except bgm_service.BgmServiceError:
                 params.bgm_file = ""
                 st.error(tr("Background Music Validation Failed"))
             else:
-                # 完整解码校验通过后才展示播放器和“已就绪”。文件仍只在点击
-                # 生成时持久化，用户仅预览或随后移除文件不会污染 storage/bgm。
+                # The player and the "ready" state only appear after the full decode check passes.
+                # The file is still persisted only when generate is clicked, so previewing or
+                # removing it never pollutes storage/bgm.
                 uploaded_mime_type = str(getattr(uploaded_bgm_file, "type", "") or "")
                 preview_mime_type = (
                     uploaded_mime_type
@@ -7757,9 +7929,10 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
                 st.info(f"{tr('Background Music Ready')}: {safe_name}")
                 params.bgm_file = safe_name
 
-        # Streamlit 会在条件控件暂时不渲染时清理其 widget state。
-        # 从其它 BGM 来源切回时用已持久化值恢复；同一来源下
-        # 用户主动清空时 previous_bgm_type 不变，因此不会被旧值反弹。
+        # Streamlit clears widget state when a conditional widget is temporarily not rendered.
+        # Switching back from another BGM source restores the persisted value; within the same
+        # source previous_bgm_type is unchanged, so an explicit clear by the user is not reverted to
+        # the old value.
         if previous_bgm_type != "custom":
             st.session_state["custom_bgm_file_input"] = _saved_ui_text(
                 "custom_bgm_file"
@@ -7773,17 +7946,19 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
             "ui", "custom_bgm_file", custom_bgm_file.strip()
         )
         if uploaded_bgm_file is None and custom_bgm_file and bgm_enabled:
-            # 文件名由服务层映射到 storage/bgm 或 resource/songs 后校验，
-            # UI 不接受两个白名单目录之外的任意路径。
+            # The service layer maps the filename into storage/bgm or resource/songs before
+            # validating it; the UI accepts no arbitrary path outside those two allowlists.
             params.bgm_file = custom_bgm_file.strip()
         elif not bgm_enabled:
-            # 上传控件继续保留用户已选择的文件，调高音量后的下一次 rerun 会自动
-            # 完整校验；当前任务参数必须清空，避免 0 音量任务保存或解析该文件。
+            # The upload widget keeps the file the user selected and the next rerun after raising
+            # the volume validates it fully; the current task parameters must be cleared so a 0
+            # volume task neither saves nor resolves that file.
             params.bgm_file = ""
 
     if params.bgm_type == "preset":
-        # 服务层已经统一完成扩展名、临时文件和符号链接校验。这里直接复用其
-        # 结果，避免 UI 维护第二套枚举规则，后续新增格式时也不会出现差异。
+        # The service layer already validates the extension, temporary files and symlinks. Its
+        # result is reused directly so the UI does not maintain a second set of enumeration rules
+        # and new formats never introduce differences.
         available_song_paths = bgm_service.list_builtin_bgm_files()
         songs_by_name = {
             os.path.basename(song_path): song_path for song_path in available_song_paths
@@ -7798,8 +7973,9 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
                 localized_widget_key("preset_song_select"), default_preset_song
             )
             if requested_preset_song not in available_songs:
-                # 历史任务或其它版本导出的设置可能引用当前安装中不存在的歌曲。
-                # 明确提示后由 stable_selectbox 回退第一首，避免静默换歌。
+                # Historical tasks or settings exported by another version may reference a song that
+                # does not exist in the current installation. After an explicit warning
+                # stable_selectbox falls back to the first song instead of silently switching.
                 st.warning(tr("Selected Background Music Unavailable"))
             selected_song = stable_selectbox(
                 tr("Preset Song"),
@@ -7812,22 +7988,25 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
                 key="preset_song_select",
             )
             _set_runtime_config("ui", "preset_song", selected_song)
-            # 用户选择歌曲后立即提供在线试听。播放器读取的是刚刚通过服务层
-            # 白名单校验得到的真实路径，不接受页面输入的任意文件路径。
+            # Offer an online preview as soon as the user picks a song. The player reads the real
+            # path that just passed the service-layer allowlist check and never accepts an arbitrary
+            # path typed on the page.
             selected_song_path = songs_by_name[selected_song]
             preview_mime_type = (
                 mimetypes.guess_type(selected_song_path)[0] or "audio/mpeg"
             )
             preview_available = True
             try:
-                # Streamlit 读取路径失败时会把 OSError 包装成内部异常，导致下面
-                # 无法按文件错误处理。先自行读取字节，既保持播放器行为，也让
-                # Docker 挂载短暂失效、权限变化等情况稳定落入可控分支。
+                # When Streamlit fails to read a path it wraps OSError into an internal exception,
+                # so the code below cannot handle it as a file error. Reading the bytes here keeps
+                # the player behavior and makes transient Docker mount or permission changes land in
+                # a controlled branch.
                 selected_song_bytes = Path(selected_song_path).read_bytes()
             except OSError as exc:
                 preview_available = False
-                # 文件可能在枚举后被其它进程删除。试听失败不能中断页面或视频
-                # 参数编辑，但需要保留日志以便定位运行环境和挂载问题。
+                # The file may be deleted by another process after enumeration. A failed preview
+                # must not interrupt the page or video parameter editing, but the log is kept to
+                # diagnose runtime environment and mount problems.
                 logger.warning(
                     "failed to preview preset background music: "
                     f"name={selected_song}, error={str(exc)}"
@@ -7901,8 +8080,9 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
             else:
                 st.success(tr("ElevenLabs Connection Test Succeeded"))
     if params.bgm_type == "sonilo" and bgm_enabled and not sonilo_service.is_enabled():
-        # 音量为 0 时任务层不会生成或混合 Sonilo 配乐，因此无需提示 Key；
-        # 该判断与任务入口共用服务层规则，避免界面提示和实际执行条件分叉。
+        # With volume 0 the task layer neither generates nor mixes Sonilo music, so no key hint is
+        # needed; this check shares the service-layer rule with the task entry so the UI hint and
+        # the actual condition never diverge.
         st.warning(tr("Sonilo API Key Required"))
     elif (
         params.bgm_type == "elevenlabs"
@@ -7930,13 +8110,14 @@ def _voice_rate_not_supported_help(tts_server, voice_name):
 
 
 def _render_audio_settings(panel, params):
-    """渲染音频设置并返回上传音频与当前配音模式。"""
+    """Render the audio settings and return the uploaded audio and the current voice mode."""
     with panel:
         with st.container(border=True):
             st.write(tr("Audio Settings"))
 
-            # 配音方式是音频设置的一级状态，负责明确区分自动配音、用户上传和无配音。
-            # 旧配置没有 voice_mode 时，根据原 tts_server 的无配音哨兵保持兼容。
+            # The voiceover method is the primary state of the audio settings and clearly separates
+            # automatic voiceover, user upload and no voiceover. When old config has no voice_mode,
+            # the legacy tts_server no-voice sentinel keeps it compatible.
             saved_tts_server = config.ui.get("tts_server", "azure-tts-v1")
             saved_voice_mode = config.ui.get("voice_mode")
             if saved_voice_mode not in {
@@ -7966,8 +8147,9 @@ def _render_audio_settings(panel, params):
             _set_runtime_config("ui", "voice_mode", voice_mode)
             tts_mode_enabled = voice_mode == VOICE_MODE_TTS
 
-            # Provider 下拉只负责选择自动配音服务；无配音已经由上方模式控制，
-            # 不再作为 TTS Provider 混入列表，避免两个入口表达同一状态。
+            # The provider dropdown only selects the automatic voiceover service; no voiceover is
+            # already controlled by the mode above and is not mixed into the TTS provider list so
+            # two entries never express the same state.
             tts_servers = [
                 ("azure-tts-v1", "Azure TTS V1 (Edge TTS)"),
                 ("azure-tts-v2", "Azure TTS V2"),
@@ -7997,47 +8179,52 @@ def _render_audio_settings(panel, params):
                     )[value],
                 )
             else:
-                # 非自动配音模式不渲染 TTS 控件，但保留上次选择，切回后可以继续使用。
+                # Non-automatic voiceover modes do not render TTS widgets, but the last choice is
+                # kept so it can be reused after switching back.
                 selected_tts_server = saved_tts_server
 
             _set_runtime_config("ui", "tts_server", selected_tts_server)
 
-            # 服务说明紧跟 Provider 选择，先告诉用户需要准备什么，再进入音色和
-            # 凭证配置。没有说明的 Provider 不渲染空提示块。
+            # The service description follows the provider selection: tell users what they need to
+            # prepare before voice and credential settings. Providers without a description render
+            # no empty tip block.
             if tts_mode_enabled:
                 provider_tips = get_tts_provider_tips(selected_tts_server)
                 if provider_tips:
                     st.info(provider_tips)
 
-            # MiniMax 只复用下方通用“配音声音”选择器。Provider 配置函数负责
-            # 刷新远端音色并返回友好文案，不再额外渲染 Voice ID 和音色下拉框。
+            # MiniMax only reuses the shared "voiceover voice" selector below. The provider config
+            # function refreshes remote voices and returns friendly labels instead of rendering an
+            # extra Voice ID and voice dropdown.
             minimax_voices = []
             minimax_voice_labels = {}
             if tts_mode_enabled and selected_tts_server == "minimax-tts":
                 minimax_voices, minimax_voice_labels = _render_minimax_tts_settings()
 
-            # 根据选择的TTS服务器获取声音列表
+            # Fetch the voice list for the selected TTS server
             filtered_voices = []
             saved_voice_name = config.ui.get("voice_name", "")
             elevenlabs_api_key_rendered = False
 
             if not tts_mode_enabled:
-                # 上传音频和无配音模式不加载远程音色，减少无意义的网络请求和界面噪音。
+                # Uploaded-audio and no-voiceover modes do not load remote voices, cutting needless
+                # network requests and UI noise.
                 filtered_voices = []
             elif selected_tts_server == "siliconflow":
-                # 获取硅基流动的声音列表
+                # Fetch the SiliconFlow voice list
                 filtered_voices = voice.get_siliconflow_voices()
             elif selected_tts_server == "gemini-tts":
-                # 获取Gemini TTS的声音列表
+                # Fetch the Gemini TTS voice list
                 filtered_voices = voice.get_gemini_voices()
             elif selected_tts_server == "mimo-tts":
-                # 获取 Xiaomi MiMo TTS 的预置音色列表
+                # Fetch the preset voice list of Xiaomi MiMo TTS
                 filtered_voices = voice.get_mimo_voices()
             elif selected_tts_server == "minimax-tts":
                 filtered_voices = minimax_voices
             elif selected_tts_server == "elevenlabs":
-                # 音色列表位于 Key 输入框之前渲染，必须先统一恢复重连状态并读取
-                # 配置/环境变量，否则页面会用空 Key 加载并缓存空音色列表。
+                # The voice list renders before the key input, so the reconnect state has to be
+                # restored and config/environment read first; otherwise the page loads and caches an
+                # empty voice list with an empty key.
                 saved_elevenlabs_api_key = _sync_elevenlabs_api_key_input()
                 cache_key = f"elevenlabs_voices_{saved_elevenlabs_api_key}"
                 if cache_key not in st.session_state:
@@ -8046,11 +8233,13 @@ def _render_audio_settings(panel, params):
                     )
                 filtered_voices = st.session_state[cache_key]
             elif selected_tts_server == "chatterbox":
-                # 自托管 Chatterbox 服务的预置音色（来自 [chatterbox] voices 配置）
+                # Preset voices of the self-hosted Chatterbox service (from the [chatterbox] voices
+                # config)
                 _sync_chatterbox_config_from_session_state()
                 filtered_voices = voice.get_chatterbox_voices()
             elif selected_tts_server == "kokoro":
-                # 自托管 Kokoro 服务的音色：[kokoro] voices 为空时从服务端 /audio/voices 读取
+                # Voices of the self-hosted Kokoro service: read from the server /audio/voices
+                # endpoint when [kokoro] voices is empty
                 _sync_kokoro_config_from_session_state()
                 filtered_voices = _get_kokoro_voice_options(saved_voice_name)
             elif selected_tts_server == "fish_audio":
@@ -8058,17 +8247,17 @@ def _render_audio_settings(panel, params):
             elif selected_tts_server == "voxcpm":
                 filtered_voices = voice.get_voxcpm_voices()
             else:
-                # 获取Azure的声音列表
+                # Fetch the Azure voice list
                 all_voices = voice.get_all_azure_voices(filter_locals=None)
 
-                # 根据选择的TTS服务器筛选声音
+                # Filter the voices by the selected TTS server
                 for v in all_voices:
                     if selected_tts_server == "azure-tts-v2":
-                        # V2版本的声音名称中包含"v2"
+                        # V2 voice names contain "v2"
                         if "V2" in v:
                             filtered_voices.append(v)
                     else:
-                        # V1版本的声音名称中不包含"v2"
+                        # V1 voice names do not contain "v2"
                         if "V2" not in v:
                             filtered_voices.append(v)
 
@@ -8100,8 +8289,9 @@ def _render_audio_settings(panel, params):
 
             friendly_names = {v: _friendly(v) for v in filtered_voices}
 
-            # Gemini 旧目录把推测的性别放在值里（例如 Charon-Male）。按基础
-            # voice name 映射到新的官方风格值，升级后继续保留用户原来的音色。
+            # The legacy Gemini catalog put the guessed gender into the value (e.g. Charon-Male).
+            # Map by base voice name to the new official style values so users keep their previous
+            # voice after upgrading.
             if (
                 selected_tts_server == "gemini-tts"
                 and saved_voice_name not in friendly_names
@@ -8119,23 +8309,23 @@ def _render_audio_settings(panel, params):
 
             saved_voice_name_index = 0
 
-            # 检查保存的声音是否在当前筛选的声音列表中
+            # Check whether the saved voice is in the currently filtered voice list
             if saved_voice_name in friendly_names:
                 saved_voice_name_index = list(friendly_names.keys()).index(
                     saved_voice_name
                 )
             else:
-                # 如果不在，则根据当前UI语言选择一个默认声音
+                # If not, choose a default voice for the current UI language
                 for i, v in enumerate(filtered_voices):
                     if v.lower().startswith(st.session_state["ui_language"].lower()):
                         saved_voice_name_index = i
                         break
 
-            # 如果没有找到匹配的声音，使用第一个声音
+            # If no matching voice is found, use the first voice
             if saved_voice_name_index >= len(friendly_names) and friendly_names:
                 saved_voice_name_index = 0
 
-            # 确保有声音可选
+            # Make sure there is a voice to choose from
             if tts_mode_enabled and friendly_names:
                 voice_name = stable_selectbox(
                     tr("Voiceover Voice"),
@@ -8146,8 +8336,8 @@ def _render_audio_settings(panel, params):
                         value,
                         str(value).removeprefix("minimax:"),
                     ),
-                    # MiniMax 支持用户直接输入列表外的克隆或生成音色 ID；其它
-                    # Provider 维持原选择器行为，不扩大本次修改的影响范围。
+                    # MiniMax lets users type a cloned or generated voice ID outside the list; other
+                    # providers keep the original selector behavior so this change stays scoped.
                     accept_new_options=selected_tts_server == "minimax-tts",
                 )
 
@@ -8164,11 +8354,12 @@ def _render_audio_settings(panel, params):
 
                 params.voice_name = voice_name
                 if not voice.is_no_voice(voice_name):
-                    # 占位 sentinel 仅用于非自动模式的禁用展示，不覆盖用户上一次
-                    # 真正选择的音色，切回自动配音后可以恢复原设置。
+                    # The placeholder sentinel is only used for disabled display in non-automatic
+                    # modes and does not overwrite the user's last real voice choice, which is
+                    # restored when switching back to automatic voiceover.
                     _set_runtime_config("ui", "voice_name", voice_name)
             elif tts_mode_enabled:
-                # 如果没有声音可选，显示提示信息
+                # If no voice is available, show a hint
                 st.warning(
                     tr(
                         "No voices available for the selected TTS server. Please select another server."
@@ -8178,11 +8369,13 @@ def _render_audio_settings(panel, params):
                 params.voice_name = ""
                 _set_runtime_config("ui", "voice_name", "")
             else:
-                # 非自动配音模式不显示音色控件，只复用保存值维持参数结构稳定。
+                # Non-automatic voiceover modes do not show the voice widget and only reuse the
+                # saved value to keep the parameter structure stable.
                 voice_name = saved_voice_name or voice.NO_VOICE_NAME
                 params.voice_name = voice_name
 
-            # 当选择V2版本或者声音是V2声音时，显示服务区域和API key输入框
+            # Show the service region and API key inputs when V2 is selected or the voice is a V2
+            # voice
             if tts_mode_enabled and (
                 selected_tts_server == "azure-tts-v2"
                 or (voice_name and voice.is_azure_v2_voice(voice_name))
@@ -8204,8 +8397,8 @@ def _render_audio_settings(panel, params):
                 _set_runtime_config("azure", "speech_key", azure_speech_key)
 
             if tts_mode_enabled and selected_tts_server == "gemini-tts":
-                # Gemini TTS 与 Gemini LLM 共用同一份密钥；在音频面板提供直接入口，
-                # 用户无需先切换 LLM Provider 才能完成语音配置。
+                # Gemini TTS shares the same key as the Gemini LLM; the audio panel offers a direct
+                # entry so users need not switch the LLM provider first to finish voice setup.
                 gemini_tts_api_key = st.text_input(
                     tr("Gemini API Key"),
                     value=config.app.get("gemini_api_key", ""),
@@ -8214,7 +8407,7 @@ def _render_audio_settings(panel, params):
                 )
                 _set_runtime_config("app", "gemini_api_key", gemini_tts_api_key)
 
-            # 当选择硅基流动时，显示API key输入框和说明信息
+            # Show the API key input and description when SiliconFlow is selected
             if tts_mode_enabled and (
                 selected_tts_server == "siliconflow"
                 or (voice_name and voice.is_siliconflow_voice(voice_name))
@@ -8230,8 +8423,8 @@ def _render_audio_settings(panel, params):
 
                 _set_runtime_config("siliconflow", "api_key", siliconflow_api_key)
 
-            # 当选择 Xiaomi MiMo TTS 时，复用 MiMo LLM provider 的 API Key。
-            # 这样用户如果同时使用 MiMo 生成文案和语音，只需要维护一份密钥。
+            # When Xiaomi MiMo TTS is selected, the API Key of the MiMo LLM provider is reused, so a
+            # user generating both scripts and speech with MiMo only maintains one key.
             if tts_mode_enabled and (
                 selected_tts_server == "mimo-tts"
                 or (voice_name and voice.is_mimo_voice(voice_name))
@@ -8541,8 +8734,9 @@ def _render_audio_settings(panel, params):
                     _parse_chatterbox_voices(kokoro_voices),
                 )
 
-            # 三种模式只渲染当前任务真正需要的控件。自动配音可调音量和语速；
-            # 上传音频只需要文件和音量；无配音不再展示无效设置。
+            # Each of the three modes only renders the widgets the current task really needs.
+            # Automatic voiceover lets volume and speech rate be adjusted; uploaded audio only needs
+            # the file and the volume; no voiceover no longer shows ineffective settings.
             params.voice_name = (
                 voice.NO_VOICE_NAME if voice_mode == VOICE_MODE_NONE else voice_name
             )
@@ -8584,7 +8778,8 @@ def _render_audio_settings(panel, params):
                 _set_runtime_config("ui", "voice_volume", params.voice_volume)
                 _set_runtime_config("ui", "voice_rate", params.voice_rate)
 
-                # 试听必须位于音量和语速控件之后，确保调用使用当前控件值。
+                # The preview must come after the volume and speech rate widgets so it uses their
+                # current values.
                 _render_voice_preview(
                     params,
                     friendly_names,
@@ -8629,7 +8824,7 @@ def _render_audio_settings(panel, params):
 
 
 def _render_subtitle_settings(panel, params):
-    """渲染字幕设置并更新生成参数。"""
+    """Render the subtitle settings and update the generation parameters."""
     with panel:
         with st.container(border=True):
             st.write(tr("Subtitle Settings"))
@@ -8772,8 +8967,9 @@ def _render_subtitle_settings(panel, params):
                 except ValueError:
                     st.error(tr("Please enter a valid number"))
 
-            # 非中文语言的颜色标签通常比中文更长。为颜色选择器保留适当宽度，
-            # 避免标签换行，同时仍给字号滑块保留足够的可操作空间。
+            # Color labels in non-Chinese languages are usually longer than in Chinese. Reserve
+            # enough width for the color picker to avoid wrapped labels while still leaving usable
+            # space for the font size slider.
             font_cols = st.columns([0.42, 0.58])
             with font_cols[0]:
                 saved_text_fore_color = config.ui.get(
@@ -8834,7 +9030,8 @@ def _render_subtitle_settings(panel, params):
                 )
                 _set_runtime_config("ui", "stroke_width", params.stroke_width)
 
-            # 背景开关的本地化名称普遍比颜色标签更长，因此让开关占据略多空间。
+            # Localized names of the background switch are generally longer than the color labels,
+            # so the switch gets slightly more room.
             subtitle_bg_cols = st.columns([0.55, 0.45])
             saved_subtitle_background_enabled = config.ui.get(
                 "subtitle_background_enabled",
@@ -8856,10 +9053,12 @@ def _render_subtitle_settings(panel, params):
                 subtitle_background_enabled,
             )
 
-            # 背景颜色和圆角样式都从属于字幕背景开关。子控件始终保留在页面中，
-            # 父开关关闭时统一禁用，避免一个控件消失而另一个控件禁用造成布局跳动。
-            # 颜色值仍保存在 UI 配置中，重新启用背景后可以恢复用户之前的选择；
-            # 传给生成服务的参数则设为 False，确保关闭状态不会实际渲染背景。
+            # The background color and the corner radius both belong to the subtitle background
+            # switch. The child widgets always stay on the page and are disabled together while the
+            # parent switch is off, so the layout does not jump when one widget disappears and
+            # another becomes disabled. Color values are still kept in the UI config so the previous
+            # choice returns when the background is re-enabled; the parameters passed to the
+            # generation service are set to False so the off state never renders a background.
             saved_subtitle_background_color = config.ui.get(
                 "subtitle_background_color",
                 DEFAULT_SUBTITLE_SETTINGS["subtitle_background_color"],
@@ -8890,8 +9089,9 @@ def _render_subtitle_settings(panel, params):
                 "rounded_subtitle_background",
                 DEFAULT_SUBTITLE_SETTINGS["rounded_subtitle_background"],
             )
-            # 背景关闭时，圆角背景没有可渲染的底色。这里禁用控件但保留原配置，
-            # 用户下次重新开启字幕背景后，可以继续使用之前保存的圆角偏好。
+            # With the background off the rounded background has no fill color to render. The widget
+            # is disabled but its config is kept so the saved corner-radius preference is still
+            # available when the user re-enables the subtitle background.
             rounded_background_disabled = (
                 subtitle_settings_disabled or not subtitle_background_enabled
             )
@@ -8918,8 +9118,9 @@ def _render_subtitle_settings(panel, params):
                 )
 
             if video.subtitle_colors_are_indistinguishable(params):
-                # 同色配置仍然是合法的用户选择，因此只在字幕设置区域就近提示，
-                # 不阻止生成。用户可以根据实际视觉需求决定是否继续。
+                # A same-color setup is still a valid user choice, so it is only hinted near the
+                # subtitle settings and never blocks generation. Users decide whether to continue
+                # based on what they actually see.
                 st.warning(tr("Subtitle Colors Are Indistinguishable"))
 
             subtitle_preview_text = params.video_script or params.video_subject
@@ -8971,11 +9172,12 @@ def _render_generation_controls(
     params, uploaded_files, uploaded_audio_file, uploaded_bgm_file, voice_mode
 ):
     """
-    校验生成依赖、提交任务，并渲染日志与成片结果。
+    Validate the generation dependencies, submit the task and render logs and results.
 
-    返回本次页面执行是否成功提交了新任务。提交前已经请求非阻塞保存，调用方
-    据此跳过页面末尾的重复请求。主脚本必须及时结束，定时 Fragment 才能持续
-    刷新进度和任务日志。
+    Returns whether this page run successfully submitted a new task. A non-blocking save was already
+    requested before submission and callers use this to skip the duplicate request at the end of the
+    page. The main script must finish promptly so the periodic Fragment can keep refreshing progress
+    and task logs.
     """
     restore_upload_requirements = st.session_state.get(
         "task_restore_upload_requirements", {}
@@ -8997,8 +9199,9 @@ def _render_generation_controls(
     if "custom_audio" in unmet_restore_requirements:
         st.warning(tr("Task Restore Custom Audio Warning"))
     if restore_upload_requirements and not unmet_restore_requirements:
-        # 用户已重新上传文件，或主动切换了素材来源/音色。此时历史任务的上传依赖
-        # 已经得到明确处理，清除标记，避免后续普通生成继续显示旧提示。
+        # The user has re-uploaded the file or actively switched the material source or voice. The
+        # historical task's upload dependency is now explicitly handled, so the marker is cleared
+        # and later ordinary generations no longer show the old hint.
         st.session_state.pop("task_restore_upload_requirements", None)
 
     _render_settings_transfer(params)
@@ -9270,22 +9473,26 @@ def _render_generation_controls(
             st.stop()
 
         if params.video_source == "local" and not has_local_materials:
-            # 本地素材为空时继续执行会先产生 TTS/字幕，最后才在素材预处理阶段失败。
-            # 在任务启动前拦截，可以避免无意义的 API 调用和中间文件。
+            # Running with no local materials would first produce TTS/subtitles and only fail later
+            # during material preprocessing. Blocking before the task starts avoids pointless API
+            # calls and intermediate files.
             _remove_active_generation_task(task_id)
             st.error(tr("Please Upload Local Materials First"))
             st.stop()
 
         if voice_mode == VOICE_MODE_UPLOAD and not uploaded_audio_file:
-            # 上传音频是用户显式选择的配音方式，缺少文件时不能静默退回 TTS。
-            # 在任务启动前拦截，避免产生与用户选择不一致的成片。
+            # Uploaded audio is the voiceover method the user chose explicitly; a missing file must
+            # not silently fall back to TTS. Blocking before the task starts prevents a final video
+            # that contradicts the user's choice.
             _remove_active_generation_task(task_id)
             st.error(tr("Please Upload Voiceover File First"))
             st.stop()
 
         if "custom_audio" in unmet_restore_requirements:
-            # 历史自定义音频不能自动回填。用户尚未重新上传且也没有主动更换音色时，
-            # 必须阻止静默退回 TTS，否则重新生成的结果会与原任务语音不一致。
+            # Historical custom audio cannot be filled back automatically. While the user has not
+            # re-uploaded it and did not actively change the voice, a silent fall back to TTS must
+            # be blocked, otherwise the regenerated result uses a different voice than the original
+            # task.
             _remove_active_generation_task(task_id)
             st.error(tr("Task Restore Custom Audio Warning"))
             st.stop()
@@ -9307,12 +9514,14 @@ def _render_generation_controls(
                 logger.error(f"WebUI background music upload failed: {str(exc)}")
                 st.error(tr("Background Music Validation Failed"))
                 st.stop()
-            # 保存成功后只把文件名写入任务参数。视频服务会在两个 BGM 白名单
-            # 目录中重新解析，避免把服务器绝对路径持久化或展示给用户。
+            # After a successful save only the filename is written into the task parameters. The
+            # video service resolves it again in the two BGM allowlist directories so a server
+            # absolute path is never persisted or shown to users.
             params.bgm_file = saved_bgm_name
         elif uploaded_bgm_file:
-            # 0 音量时视频服务不会使用任何 BGM，因此不再把已经预览的上传文件
-            # 持久化到 storage。用户之后调高音量时可直接再次点击生成完成保存。
+            # At volume 0 the video service uses no BGM, so an already previewed upload is not
+            # persisted to storage. When the user raises the volume later, clicking generate again
+            # performs the save.
             params.bgm_file = ""
 
         if uploaded_audio_file:
@@ -9353,7 +9562,8 @@ def _render_generation_controls(
             params.custom_audio_file = custom_audio_path
 
         if uploaded_files:
-            # 每次重新上传时都以本次选择的素材为准，避免旧素材不断重复追加。
+            # Every re-upload takes precedence with the newly selected materials so old ones are not
+            # appended over and over.
             try:
                 params.video_materials, persisted_local_materials = (
                     _save_uploaded_local_materials(uploaded_files)
@@ -9368,12 +9578,14 @@ def _render_generation_controls(
                 logger.error(f"WebUI local material upload failed: {exc}")
                 st.error(str(exc))
                 st.stop()
-            # 将已上传并保存到本地的视频素材写入会话，供后续只改文案时直接复用。
+            # Store the uploaded materials already saved locally in the session so editing only the
+            # script can reuse them directly.
             st.session_state["local_video_materials"] = persisted_local_materials
         elif (
             params.video_source == "local" and st.session_state["local_video_materials"]
         ):
-            # 当用户没有重新上传文件时，复用最近一次已经保存到磁盘的本地素材列表。
+            # When the user did not upload new files, reuse the latest local material list saved to
+            # disk.
             params.video_materials = []
             for material_entry in st.session_state["local_video_materials"]:
                 m = MaterialInfo()
@@ -9388,9 +9600,10 @@ def _render_generation_controls(
             voice_mode,
         )
         if reusable_voice_preview:
-            # 试听缓存只存在当前 Streamlit 会话。提交前把音频写入目标任务目录，
-            # 后台线程随后只读取任务自己的文件；即使页面 rerun、浏览器关闭或
-            # 用户试听其它音色，也不会影响已经入队的生成任务。
+            # The preview cache only exists in the current Streamlit session. Before submitting, the
+            # audio is written into the target task directory and the background thread only reads
+            # the task's own file; a page rerun, a closed browser or the user previewing another
+            # voice cannot affect a generation task already queued.
             try:
                 preview_audio_file = os.path.join(
                     utils.task_dir(task_id),
@@ -9426,8 +9639,9 @@ def _render_generation_controls(
                    if params.video_source == "jalapeno" else {}),
             )
             if loomloom_video_request is not None:
-                # 一个报价只允许提交一次。后台请求自带稳定幂等 ID；提交成功后
-                # 清除页面报价，下一次生成必须重新询价和确认。
+                # One quote may be submitted only once. The background request carries a stable
+                # idempotent ID; after a successful submit the page quote is cleared and the next
+                # generation has to quote and confirm again.
                 st.session_state["loomloom_video_batch"] = None
                 st.session_state["loomloom_video_quote"] = None
                 st.session_state["loomloom_video_input_signature"] = ""
@@ -9452,7 +9666,7 @@ def _render_generation_controls(
 
 
 def _render_application():
-    """按固定顺序渲染顶部栏、弹窗、生成表单和任务结果。"""
+    """Render the top bar, dialogs, generation form and task results in a fixed order."""
     _render_top_bar()
 
     if st.session_state.get("settings_dialog_open", False):
@@ -9497,8 +9711,9 @@ def _render_application():
         voice_mode,
     )
 
-    # 生成分支在启动后台线程前已经请求过保存。普通控件交互继续请求非阻塞保存；
-    # 如果后台任务正在使用配置，配置层会在任务结束时自动应用并落盘最新值。
+    # The generation branch already requested a save before starting the background thread. Ordinary
+    # widget interaction keeps requesting a non-blocking save; if a background task is using the
+    # config, the config layer applies and persists the latest values when the task finishes.
     if not generation_submitted:
         _save_runtime_config()
 

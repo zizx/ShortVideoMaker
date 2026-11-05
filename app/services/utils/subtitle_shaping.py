@@ -1,14 +1,17 @@
-"""阿拉伯字母字幕的整形（shaping）适配层。
+"""Shaping adapter for Arabic-script subtitles.
 
-阿拉伯文、波斯文、乌尔都文等阿拉伯字母文字必须先按上下文选择字形、连写，
-再从右到左排版，才能正确显示；元音符号也要由 OpenType 规则定位到所属字母上。
-Pillow 只有在带 Raqm 构建时才会整形，而 Windows 等常见安装没有 Raqm，
-于是字母断开、顺序颠倒、元音符号错位。
+Arabic-script languages such as Arabic, Persian and Urdu must first pick
+contextual glyph forms and join letters, then lay out right-to-left, to display
+correctly; vowel marks must also be positioned on their letters by OpenType
+rules. Pillow shapes only when built with Raqm, and common installs such as
+Windows lack Raqm, so letters break apart, the order reverses and vowel marks
+land in the wrong place.
 
-这里把含阿拉伯字母的字幕交给 khatt（HarfBuzz 整形 + FreeType 光栅化，
-由 wheel 自带，不依赖系统库）测量和绘制；khatt 从不调用 Pillow 的文字排版，
-因此无论 Pillow 是否带 Raqm，结果都一致，也不会出现二次整形。
-其他语言仍走 MoviePy 原生 TextClip，渲染结果保持不变。
+Here, subtitles containing Arabic-script characters are measured and drawn by
+khatt (HarfBuzz shaping + FreeType rasterization, bundled in the wheel with no
+system library dependency); khatt never calls Pillow's text layout, so results
+are identical whether or not Pillow has Raqm, and no double shaping occurs.
+Other languages still go through MoviePy's native TextClip, unchanged.
 """
 
 from __future__ import annotations
@@ -21,8 +24,8 @@ from khatt.fonts import font_path as khatt_font_path
 from khatt.video import TextClip as ShapedTextClip
 from loguru import logger
 
-# 阿拉伯字母相关的 Unicode 区块：基本区、补充区、扩展 A/B 以及表现形式 A/B
-# （不含 U+FEFF 字节顺序标记）。
+# Unicode blocks related to the Arabic script: base, supplement, Extended A/B
+# and presentation forms A/B (excluding the U+FEFF byte order mark).
 _ARABIC_SCRIPT_RANGES = (
     (0x0600, 0x06FF),
     (0x0750, 0x077F),
@@ -32,30 +35,32 @@ _ARABIC_SCRIPT_RANGES = (
     (0xFE70, 0xFEFC),
 )
 
-# 方向标记：不可见，只决定一行文字作为段落的方向。
+# Direction marks: invisible; they only fix a line's direction as a paragraph.
 RLM = "‏"
 LRM = "‎"
 
-# 项目自带字体都不含阿拉伯字形。所选字体缺字时改用 khatt 自带的
-# Noto Naskh Arabic（SIL OFL 1.1），它同时覆盖阿拉伯文、波斯文和乌尔都文。
+# Fonts bundled with the project contain no Arabic glyphs. When the chosen font
+# lacks them, khatt's bundled Noto Naskh Arabic (SIL OFL 1.1) takes over; it
+# covers Arabic, Persian and Urdu at the same time.
 FALLBACK_FONT = "noto-naskh"
 
 
 def _is_arabic_char(char: str) -> bool:
-    # 只看字母、标记和符号（L/M/S 类）：阿拉伯逗号、问号和阿拉伯-印度数字
-    # 也被迪维希语（Thaana）、叙利亚文和 N'Ko 共用，不能据此判定为阿拉伯字母。
+    # Only letters, marks and symbols (L/M/S categories) count: the Arabic
+    # comma, question mark and Arabic-Indic digits are also shared by Thaana,
+    # Syriac and N'Ko, so they cannot identify Arabic script on their own.
     return unicodedata.category(char)[0] in "LMS" and any(
         start <= ord(char) <= end for start, end in _ARABIC_SCRIPT_RANGES
     )
 
 
 def needs_shaping(text: str | None) -> bool:
-    """文本是否包含需要整形的阿拉伯字母。"""
+    """Whether the text contains Arabic-script letters that need shaping."""
     return any(_is_arabic_char(char) for char in text or "")
 
 
 def is_rtl_paragraph(text: str) -> bool:
-    """按第一个强方向字符判断段落方向（Unicode 双向算法 P2/P3 规则）。"""
+    """Decide paragraph direction from the first strong character (bidi P2/P3)."""
     for char in text:
         direction = unicodedata.bidirectional(char)
         if direction in ("R", "AL"):
@@ -66,25 +71,29 @@ def is_rtl_paragraph(text: str) -> bool:
 
 
 def direction_mark(text: str) -> str:
-    """与 ``text`` 段落方向一致的方向标记。
+    """A direction mark matching the paragraph direction of ``text``.
 
-    khatt 把每一行当作独立段落，按行首第一个强方向字符判断方向。自动折出的
-    行必须沿用原段落的方向，否则以英文或数字开头的行词序会颠倒，所以每行
-    前面都加上这个标记。
+    khatt treats every line as its own paragraph and decides direction from the
+    first strong character at the line start. Automatically wrapped lines must
+    keep the original paragraph's direction, otherwise lines starting with
+    English or digits reverse their word order, so this mark is prefixed to
+    each line.
     """
     return RLM if is_rtl_paragraph(text) else LRM
 
 
 def resolve_font(font_path: str, text: str) -> tuple[str, bool]:
-    """返回实际用于绘制 ``text`` 的字体文件，以及是否改用了后备字体。
+    """Return the font file actually used to draw ``text`` and whether it fell back.
 
-    只在所选字体缺少阿拉伯字母字形时才回退；缺少的若只是表情符号等
-    其他字符，保持用户选择的字体，由 khatt 按原有方式跳过并给出警告。
+    Falling back happens only when the chosen font lacks Arabic-script glyphs;
+    if the missing characters are merely emoji or other symbols, the user's
+    font is kept and khatt skips them with a warning as it already did.
     """
     try:
         missing = khatt.missing_characters(text, font_path)
     except (KeyError, ValueError) as exc:
-        # 字体文件不存在或 khatt 无法读取时，仍然保证字幕可读。
+        # When the font file is missing or khatt cannot read it, keep subtitles
+        # readable.
         logger.warning(f"cannot check subtitle font glyphs, using {FALLBACK_FONT}: {exc}")
         return str(khatt_font_path(FALLBACK_FONT)), True
     if any(_is_arabic_char(char) for char in missing):
@@ -93,25 +102,27 @@ def resolve_font(font_path: str, text: str) -> tuple[str, bool]:
 
 
 def fallback_fonts(shaped_font: str, font_path: str) -> list[str]:
-    """绘制阿拉伯字母字幕时，``shaped_font`` 画不出的字符改用哪些字体。
+    """Fonts used for characters ``shaped_font`` cannot draw in shaped subtitles.
 
-    改用后备字体时，同一条字幕中后备字体没有的字符（例如阿拉伯文后面的
-    中文）仍由用户所选字体绘制，khatt 按字符逐段回退，不会丢字。
+    After a fallback font is used, characters the fallback lacks within the same
+    subtitle (for example the Chinese after the Arabic text) are still drawn by
+    the user's font: khatt falls back run by run, so nothing is dropped.
     """
     if not font_path or shaped_font == font_path:
         return []
     try:
         khatt_font_path(font_path)
     except (KeyError, ValueError):
-        return []  # 所选字体无法读取，resolve_font 已经提示过
+        return []  # The chosen font is unreadable; resolve_font already warned
     return [font_path]
 
 
 def video_font(font_path: str, subtitles: Iterable[str]) -> str:
-    """为一条视频的全部阿拉伯字母字幕确定同一个字体。
+    """Pick one font for all Arabic-script subtitles of a video.
 
-    逐条字幕各自选择字体时，同一视频中的字幕可能在两种字体之间来回切换，
-    因此按全部字幕一次确定；字体回退和无法绘制的字符各提示一次。
+    Choosing a font per subtitle could make subtitles in the same video flip
+    between two fonts, so one choice is made from all subtitles at once; the
+    font fallback and undrawable characters are each reported once.
     """
     text = "".join(subtitle for subtitle in subtitles if needs_shaping(subtitle))
     if not text:
@@ -126,7 +137,8 @@ def video_font(font_path: str, subtitles: Iterable[str]) -> str:
         text, font, fallback_fonts=fallback_fonts(font, font_path)
     )
     if skipped:
-        # 例如表情符号：后备字体和所选字体都没有这些字形，绘制时会被跳过。
+        # For example emoji: neither the fallback nor the chosen font has these
+        # glyphs, so drawing skips them.
         logger.warning(
             "characters in Arabic-script subtitles that the subtitle font cannot "
             f"draw are skipped: {''.join(skipped[:20])}"
@@ -135,7 +147,7 @@ def video_font(font_path: str, subtitles: Iterable[str]) -> str:
 
 
 def supports_text(font_path: str, text: str) -> bool:
-    """实际绘制 ``text`` 的字体（必要时为后备字体加所选字体）能否画出其中全部字符。"""
+    """Whether the font actually drawing ``text`` can render every character."""
     font, _ = resolve_font(font_path, text)
     return not khatt.missing_characters(
         text, font, fallback_fonts=fallback_fonts(font, font_path)
@@ -145,7 +157,10 @@ def supports_text(font_path: str, text: str) -> bool:
 def text_width(
     text: str, font_path: str, font_size: int, fallbacks: Iterable[str] = ()
 ) -> int:
-    """按整形后的实际字形测量单行文本宽度（像素）；``fallbacks`` 见 :func:`fallback_fonts`。"""
+    """Measure the width in pixels of one shaped line of text.
+
+    ``fallbacks`` is described in :func:`fallback_fonts`.
+    """
     left, _, right, _ = khatt.text_bbox(
         text, font=font_path, size_px=int(font_size), fallback_fonts=list(fallbacks)
     )
@@ -153,12 +168,13 @@ def text_width(
 
 
 def text_clip(native, *, shaped_font: str | None = None, **kwargs):
-    """创建字幕 TextClip：阿拉伯字母文本由 khatt 绘制，其余交给 ``native``。
+    """Create a subtitle TextClip: khatt draws Arabic-script text, ``native`` the rest.
 
-    ``native`` 是调用方使用的 MoviePy ``TextClip``，非阿拉伯字母文本原样
-    交给它，与改动前完全相同。其余参数与 MoviePy 2.2 的 ``TextClip`` 一致。
-    ``shaped_font`` 是绘制阿拉伯字母文本的字体（见 :func:`video_font`），
-    省略时按 ``font`` 和本段文本确定；它画不出的字符由 ``font`` 绘制。
+    ``native`` is the MoviePy ``TextClip`` used by the caller; non-Arabic text is
+    handed to it exactly as before. Other arguments match MoviePy 2.2's
+    ``TextClip``. ``shaped_font`` is the font that draws Arabic-script text (see
+    :func:`video_font`); when omitted it is derived from ``font`` and this text,
+    and characters it cannot draw are rendered with ``font``.
     """
     text = kwargs.get("text")
     if not needs_shaping(text):
