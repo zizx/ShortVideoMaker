@@ -11,7 +11,8 @@ WEBUI_MAIN = ROOT_DIR / "webui" / "Main.py"
 
 
 def _widget_by_key(elements, key):
-    """按稳定业务 key 查找经过语言后缀处理的 Streamlit 控件。"""
+    """Find a Streamlit widget by its stable business key, including the
+    language-suffixed form."""
     return next(
         item
         for item in elements
@@ -70,7 +71,8 @@ def test_metaso_source_requires_confirmation_and_never_enters_task_params():
 
 
 def test_invalid_metaso_resolution_requires_an_explicit_replacement():
-    """打开设置不能把无效分辨率静默改成价格更高的默认 2K。"""
+    """Opening settings must not silently change an invalid resolution to the
+    pricier default 2K."""
     test_config = dict(
         config.app,
         llm_provider="openai",
@@ -103,7 +105,8 @@ def test_invalid_metaso_resolution_requires_an_explicit_replacement():
 
 
 def test_metaso_upload_voiceover_uses_actual_audio_billing_copy():
-    """上传配音时不得用脚本文字长度冒充真实的付费任务数量。"""
+    """Uploading a voiceover must not use script text length in place of the
+    real paid task count."""
     test_config = dict(
         config.app,
         video_source="metaso_minimax",

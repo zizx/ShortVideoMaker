@@ -13,7 +13,7 @@ from app.services.utils import video_effects
 
 
 def _gradient_clip(width=64, height=48, duration=1.0):
-    """创建非均匀渐变画面，确保缩放前后的像素差异可以被可靠检测。"""
+    """Create a non-uniform gradient frame so zoom changes are reliably detectable."""
     x = np.linspace(0, 255, width, dtype=np.uint8)
     y = np.linspace(0, 255, height, dtype=np.uint8)
     frame = np.stack(np.meshgrid(x, y), axis=-1).sum(axis=-1) % 256
@@ -22,7 +22,7 @@ def _gradient_clip(width=64, height=48, duration=1.0):
 
 
 def _detail_frame(width=128, height=96):
-    """创建包含高频细节的 RGB 帧，用于观察亚像素缩放是否连续响应。"""
+    """Create an RGB frame with high-frequency detail to observe subpixel zoom."""
     x = np.arange(width, dtype=np.int16)
     y = np.arange(height, dtype=np.int16)[:, None]
     return np.stack(
@@ -37,7 +37,7 @@ def _detail_frame(width=128, height=96):
 
 class TestFadeAndSlideTransitions(unittest.TestCase):
     def test_fade_transitions_apply_requested_duration(self):
-        """淡入淡出必须把调用方传入的时长原样交给 MoviePy effect。"""
+        """Fade transitions must pass the caller's duration to the effect verbatim."""
         clip = _gradient_clip()
         self.addCleanup(clip.close)
 
@@ -62,7 +62,7 @@ class TestFadeAndSlideTransitions(unittest.TestCase):
         )
 
     def test_slidein_positions_cover_all_directions_and_unknown_side(self):
-        """滑入动画的四个方向、结束位置和未知方向兜底都应保持稳定。"""
+        """Slide-in stays stable across four directions, end positions and unknown sides."""
         clip = _gradient_clip(width=60, height=40, duration=2)
         self.addCleanup(clip.close)
         expected_starts = {
@@ -83,8 +83,9 @@ class TestFadeAndSlideTransitions(unittest.TestCase):
 
     def test_slideout_positions_cover_timing_and_all_directions(self):
         """
-        滑出应在片段尾部才开始运动；四个方向、超过结束时间和零时长参数
-        都需要被夹紧，避免出现除零或素材提前离场。
+        Slide-out should only start moving at the clip tail; the four directions,
+        an end time beyond the clip and a zero duration must all be clamped, so
+        nothing divides by zero or leaves the frame early.
         """
         clip = _gradient_clip(width=60, height=40, duration=2)
         self.addCleanup(clip.close)
@@ -130,9 +131,9 @@ class TestZoomTransitions(unittest.TestCase):
 
         self.assertEqual(first.shape, original.shape)
         self.assertEqual(first.dtype, np.uint8)
-        # 放大从 1 倍开始，因此首帧应与原始画面保持一致。
+        # Zoom starts at 1x, so the first frame must match the original picture.
         np.testing.assert_allclose(first, original, atol=2)
-        # 末帧来自中心裁剪并放大后的区域，应与原始画面存在明显差异。
+        # The last frame is a center crop scaled up, so it should differ clearly.
         self.assertGreater(np.abs(last.astype(int) - original.astype(int)).max(), 2)
 
     def test_zoomout_starts_zoomed_and_returns_to_source(self):
@@ -147,7 +148,7 @@ class TestZoomTransitions(unittest.TestCase):
         last = zoomed.get_frame(clip.duration)
         original = clip.get_frame(0)
 
-        # 缩小的首帧为 1.2 倍画面，结束时精确回到原始比例。
+        # The shrink starts at 1.2x and returns exactly to the original scale.
         self.assertGreater(np.abs(first.astype(int) - original.astype(int)).max(), 2)
         np.testing.assert_allclose(last, original, atol=2)
 
@@ -163,8 +164,9 @@ class TestZoomTransitions(unittest.TestCase):
         first = video_effects._zoom_frame(frame, 1.1)
         second = video_effects._zoom_frame(frame, 1.1001)
 
-        # 这两个比例在旧的整数裁剪算法中会落入相同裁剪尺寸，产生完全相同的帧，
-        # 随后在跨过整数边界时突然跳变。亚像素采样应当能响应这种微小比例变化。
+        # Under the old integer crop algorithm both ratios produce the same crop
+        # size and therefore identical frames, then jump when crossing an integer
+        # boundary. Subpixel sampling should respond to such a tiny ratio change.
         self.assertGreater(np.count_nonzero(first != second), 0)
         self.assertLessEqual(
             np.abs(first.astype(np.int16) - second.astype(np.int16)).max(),
@@ -183,7 +185,8 @@ class TestZoomTransitions(unittest.TestCase):
 
         self.assertEqual(zoomed.shape, frame.shape)
         self.assertEqual(zoomed.dtype, frame.dtype)
-        # 奇数宽高只有一个精确中心像素，缩放后该像素不应发生横向或纵向漂移。
+        # An odd width/height has exactly one center pixel; after zoom it must not
+        # drift horizontally or vertically.
         np.testing.assert_allclose(
             zoomed[center_y, center_x],
             frame[center_y, center_x],

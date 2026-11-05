@@ -1,4 +1,5 @@
-"""验证 Jalapeno 的 LLM 请求、Seedance 接入配置与付费任务边界。"""
+"""Verify Jalapeno's LLM requests, Seedance integration configuration and paid
+task boundaries."""
 
 import json
 from types import SimpleNamespace
@@ -360,7 +361,8 @@ def test_batch_jalapeno_requires_global_charge_confirmation(tmp_path):
 
 
 def test_queued_webui_video_keeps_the_confirmed_endpoint():
-    """真实队列延后执行：后续表单变化不能替换已确认的计费配置。"""
+    """Deferred execution on the real queue: later form changes must not replace
+    the already confirmed billed configuration."""
     from app.controllers.manager.memory_manager import InMemoryTaskManager
     from app.services import webui_task
 
@@ -401,7 +403,8 @@ def test_queued_webui_video_keeps_the_confirmed_endpoint():
 def test_pipeline_uses_one_endpoint_after_configuration_changes(
     tmp_path, confirmed_before_queue
 ):
-    """覆盖预检、配音、素材下载到实际 HTTP 参数，防止中途重新读取全局配置。"""
+    """Cover preflight, narration and material download through the real HTTP
+    parameters, ensuring global config is not re-read midway."""
     config.app.update(jalapeno_video_api_key="confirmed-key")
     confirmed = provider.endpoint() if confirmed_before_queue else None
     params = VideoParams(

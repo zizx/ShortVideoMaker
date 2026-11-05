@@ -1,4 +1,4 @@
-"""验证 Infistar 的真实 SDK 请求、默认配置和自定义覆盖。"""
+"""Verify Infistar's real SDK requests, default configuration and custom overrides."""
 
 import json
 from unittest.mock import patch
@@ -26,7 +26,8 @@ from app.services import llm
 def test_infistar_chat_completion_request(
     base_url, model, expected_url, expected_model
 ):
-    """通过真实 OpenAI SDK 编解码，避免只检查模拟客户端的调用参数。"""
+    """Encode and decode through the real OpenAI SDK instead of only checking the
+    arguments passed to a mock client."""
     received = []
 
     def respond(request):
@@ -77,7 +78,8 @@ def test_infistar_chat_completion_request(
 
 
 def test_infistar_missing_key_does_not_send_request():
-    """选择新 Provider 后必须使用专属 Key，不能意外复用其他服务的凭据。"""
+    """After choosing a new provider its dedicated key must be used; credentials
+    from another service must never be reused by accident."""
     app_config = dict(
         config.app,
         llm_provider="infistar",

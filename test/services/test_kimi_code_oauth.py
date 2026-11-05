@@ -1,9 +1,12 @@
-"""kimi_code OAuth 模块的单元测试。
+"""Unit tests for the kimi_code OAuth module.
 
-覆盖设备授权状态机：设备码请求、pending / slow_down / expired / denied 轮询、
-token 持久化与 refresh 轮换、过期余量下的透明续期、并发续期串行化、凭证落盘、
-以及凭证清除。网络层（requests.post）与时间（time.time）全部打桩，不访问真实
-端点；除专门的落盘测试外，配置保存统一打桩，避免触碰真实 config.toml。
+Covers the device authorization state machine: device code requests, pending /
+slow_down / expired / denied polling, token persistence and refresh rotation,
+transparent renewal under a nearing expiry, serialized concurrent renewal,
+credential persistence, and credential clearing. The network layer
+(requests.post) and time (time.time) are fully stubbed, so no real endpoint is
+contacted; except for dedicated persistence tests, config saving is stubbed to
+avoid touching the real config.toml.
 """
 
 import threading
@@ -38,7 +41,8 @@ class TestKimiCodeOAuth(unittest.TestCase):
     def setUp(self):
         self.original_app_config = dict(config.app)
         config.app.clear()
-        # 默认打桩配置保存，避免测试写真实 config.toml；落盘测试会临时恢复真实实现。
+        # Stub config saving by default so tests never write the real
+        # config.toml; persistence tests temporarily restore the real one.
         self.real_try_save_config = config.try_save_config
         save_patcher = patch.object(config, "try_save_config", return_value=True)
         self.mock_try_save_config = save_patcher.start()
@@ -156,7 +160,8 @@ class TestKimiCodeOAuth(unittest.TestCase):
         oauth.store_token_bundle(
             "china", {"access_token": "at-1", "refresh_token": "rt-old", "expires_in": 900}
         )
-        # 新一轮 payload 未携带 refresh token 时，保留已有的，避免覆盖为空。
+        # When a new payload carries no refresh token, keep the existing one
+        # instead of overwriting it with an empty value.
         oauth.store_token_bundle(
             "china", {"access_token": "at-2", "expires_in": 900}
         )
@@ -168,20 +173,23 @@ class TestKimiCodeOAuth(unittest.TestCase):
         self.assertEqual(config.app["kimi_code_refresh_token"], "rt-new")
 
     def test_store_token_bundle_requests_config_save(self):
-        # 纯 API 调用路径没有后续 WebUI 保存，写凭证时必须主动请求落盘。
+        # A pure API call path has no later WebUI save, so writing credentials
+        # must explicitly request a persist to disk.
         oauth.store_token_bundle(
             "china", {"access_token": "at-1", "refresh_token": "rt-1", "expires_in": 900}
         )
         self.mock_try_save_config.assert_called()
 
     def test_store_token_bundle_saved_to_disk_and_survives_reload(self):
-        """refresh token 轮换后必须可靠落盘：模拟重启后凭磁盘状态仍能续期。"""
+        """A rotated refresh token must reach disk reliably: after a simulated
+        restart the on-disk state still supports renewal."""
         with TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.toml"
             original_cfg = dict(config._cfg)
             try:
                 with (
-                    # 临时文件与目标文件放在同一目录，保证 os.replace 同盘原子替换。
+                    # Keep temp and target files in the same directory so
+                    # os.replace stays an atomic same-disk replace.
                     patch.object(config, "root_dir", temp_dir),
                     patch.object(config, "config_file", str(config_path)),
                     patch.object(
@@ -198,12 +206,13 @@ class TestKimiCodeOAuth(unittest.TestCase):
                     )
                     on_disk = toml.load(str(config_path))
             finally:
-                # save_config 会重写模块级 _cfg，恢复以免影响其它测试。
+                # save_config rewrites the module-level _cfg; restore it so other
+                # tests are unaffected.
                 config._cfg.clear()
                 config._cfg.update(original_cfg)
         self.assertEqual(on_disk["app"]["kimi_code_access_token"], "at-1")
         self.assertEqual(on_disk["app"]["kimi_code_refresh_token"], "rt-new")
-        # 模拟重启：清空内存配置，只从磁盘内容恢复。
+        # Simulate a restart: clear in-memory config and restore from disk only.
         config.app.clear()
         config.app.update(on_disk["app"])
         self.assertTrue(oauth.is_authorized())
@@ -221,14 +230,15 @@ class TestKimiCodeOAuth(unittest.TestCase):
         self.assertEqual(oauth.get_valid_access_token(), "at-1")
 
     def test_get_valid_access_token_refreshes_near_expiry(self):
-        self._prime_tokens(expires_in=10)  # 小于 60s 余量，触发续期
+        self._prime_tokens(expires_in=10)  # below the 60s margin, triggers renewal
         refreshed = {"access_token": "at-2", "refresh_token": "rt-2", "expires_in": 900}
         with patch.object(
             oauth.requests, "post", return_value=_response(refreshed)
         ) as post:
             token = oauth.get_valid_access_token()
         self.assertEqual(token, "at-2")
-        # 续期结果必须写回配置，下一次调用不再重复刷新。
+        # The renewal result must be written back to config so the next call does
+        # not refresh again.
         self.assertEqual(config.app["kimi_code_access_token"], "at-2")
         self.assertEqual(config.app["kimi_code_refresh_token"], "rt-2")
         self.assertEqual(post.call_args.kwargs["data"]["grant_type"], "refresh_token")
@@ -254,13 +264,14 @@ class TestKimiCodeOAuth(unittest.TestCase):
                 oauth.get_valid_access_token()
 
     def test_concurrent_refresh_is_serialized(self):
-        """并发续期必须串行：旧 refresh token 只能换一次，其余线程复用结果。"""
+        """Concurrent renewal must be serialized: the old refresh token can be
+        exchanged only once and the other threads reuse the result."""
         self._prime_tokens(expires_in=-1)
         refresh_calls = []
 
         def fake_refresh(region, refresh_token):
             refresh_calls.append(refresh_token)
-            time.sleep(0.05)  # 放大竞态窗口
+            time.sleep(0.05)  # widen the race window
             return {"access_token": "at-new", "refresh_token": "rt-new", "expires_in": 900}
 
         results = []
@@ -269,7 +280,7 @@ class TestKimiCodeOAuth(unittest.TestCase):
         def worker():
             try:
                 results.append(oauth.get_valid_access_token())
-            except Exception as exc:  # pragma: no cover - 失败时便于诊断
+            except Exception as exc:  # pragma: no cover - aids diagnosis on failure
                 errors.append(exc)
 
         with patch.object(oauth, "_refresh", side_effect=fake_refresh):
@@ -284,26 +295,29 @@ class TestKimiCodeOAuth(unittest.TestCase):
         self.assertEqual(sorted(results), ["at-new"] * 4)
         self.assertEqual(config.app["kimi_code_refresh_token"], "rt-new")
 
-    # ---- 配置锁持锁期间的可见性（视频任务并发场景） ----
+    # ---- Visibility while the config lock is held (concurrent video tasks) ----
 
     def test_credentials_visible_while_config_lock_held(self):
-        """视频任务持锁时 _set 只排队：刚完成的登录必须立即对读取可见。"""
+        """While a video task holds the lock, _set only queues: a login that just
+        finished must be immediately visible to readers."""
         with config.runtime_config_lock():
             oauth.store_token_bundle(
                 "china",
                 {"access_token": "at-1", "refresh_token": "rt-1", "expires_in": 900},
             )
-            # 排队中的凭证也必须算数：不能误判为未授权。
+            # Queued credentials must count too: never misreport as unauthorized.
             self.assertTrue(oauth.is_authorized())
             self.assertEqual(oauth.get_valid_access_token(), "at-1")
 
     def test_successive_calls_reuse_queued_refresh_while_lock_held(self):
-        """持锁期间 refresh 结果仍在队列：后续调用不能重放已轮换的旧 token。"""
+        """With the lock held the refresh result is still queued: later calls must
+        not replay the already-rotated old token."""
         redeemed = []
 
         def rotating_refresh(region, refresh_token):
             if refresh_token in redeemed:
-                # 模拟服务端轮换后拒绝旧 token 重放
+                # Simulate the server rejecting a replay of the old token after
+                # it has been rotated
                 raise ValueError("kimi_code: token refresh failed: invalid_grant")
             redeemed.append(refresh_token)
             return {
@@ -315,21 +329,23 @@ class TestKimiCodeOAuth(unittest.TestCase):
         with config.runtime_config_lock(), patch.object(
             oauth, "_refresh", side_effect=rotating_refresh
         ):
-            self._prime_tokens(expires_in=-1)  # at-1 已过期，rt-1 可兑换一次
+            self._prime_tokens(expires_in=-1)  # at-1 expired, rt-1 redeemable once
             first = oauth.get_valid_access_token()
             second = oauth.get_valid_access_token()
 
         self.assertEqual(first, second)
         self.assertEqual(redeemed, ["rt-1"])
 
-    # ---- 在途 refresh 与凭证清除/更换的竞态 ----
+    # ---- Races between an in-flight refresh and credential clearing/replacement ----
 
     def test_in_flight_refresh_discarded_after_disconnect(self):
-        """refresh 响应在途时用户断开连接：结果必须丢弃，授权状态不能复活。"""
+        """The user disconnects while a refresh response is in flight: the result
+        must be discarded and authorization must not come back to life."""
         self._prime_tokens(expires_in=-1)
 
         def refresh_then_disconnect(region, refresh_token):
-            # 模拟响应返回前用户在另一个会话点了 Disconnect
+            # Simulate the user clicking Disconnect in another session before the
+            # response arrives
             oauth.clear_credentials()
             return {"access_token": "at-zombie", "refresh_token": "rt-zombie", "expires_in": 900}
 
@@ -340,11 +356,12 @@ class TestKimiCodeOAuth(unittest.TestCase):
         self.assertEqual(config.app["kimi_code_access_token"], "")
 
     def test_in_flight_refresh_discarded_after_credential_replacement(self):
-        """在途 refresh 期间凭证被新登录替换：旧结果不能覆盖新凭证。"""
+        """Credentials are replaced by a new login during an in-flight refresh:
+        the stale result must not overwrite the new credentials."""
         self._prime_tokens(expires_in=-1)
 
         def refresh_then_replace(region, refresh_token):
-            # 模拟响应返回前用户完成了一次新的登录
+            # Simulate the user completing a new login before the response arrives
             oauth.store_token_bundle(
                 "china",
                 {"access_token": "at-new-login", "refresh_token": "rt-new-login", "expires_in": 900},
@@ -357,10 +374,11 @@ class TestKimiCodeOAuth(unittest.TestCase):
         self.assertEqual(config.app["kimi_code_access_token"], "at-new-login")
         self.assertEqual(config.app["kimi_code_refresh_token"], "rt-new-login")
 
-    # ---- 身份头（真实应用身份） ----
+    # ---- Identity headers (genuine application identity) ----
 
     def test_identity_headers_use_genuine_application_identity(self):
-        """身份头必须是 MoneyPrinterTurbo 自己的，不伪装成 kimi_code_cli。"""
+        """Identity headers must be MoneyPrinterTurbo's own and must not pose as
+        kimi_code_cli."""
         headers = oauth._identity_headers()
         self.assertEqual(headers["X-Msh-Platform"], "MoneyPrinterTurbo")
         self.assertEqual(headers["X-Msh-Version"], oauth.__version__)
@@ -380,10 +398,11 @@ class TestKimiCodeOAuth(unittest.TestCase):
         self.assertEqual(sent["X-Msh-Platform"], "MoneyPrinterTurbo")
         self.assertTrue(sent["User-Agent"].startswith("MoneyPrinterTurbo/"))
 
-    # ---- network error contract (WebUI 依赖) ----
+    # ---- network error contract (relied on by the WebUI) ----
 
     def test_request_device_code_network_error_propagates(self):
-        """网络异常以 RequestException 原样抛出，WebUI 据此展示可重试错误。"""
+        """Network errors propagate unchanged as RequestException, which the
+        WebUI turns into a retryable error message."""
         with patch.object(
             oauth.requests,
             "post",

@@ -1,8 +1,10 @@
-"""秘塔 MiniMax H3 文生视频客户端。
+"""Metaso MiniMax H3 text-to-video client.
 
-该模块只负责秘塔代理的 MiniMax V2 协议：提交付费任务、轮询同一个任务、
-解析生成结果。素材按需生成、文件下载和成片拼接仍由 ``material`` 服务负责，
-避免供应商协议与本地视频工作流相互耦合。
+This module only handles the MiniMax V2 protocol behind the Metaso proxy:
+submitting paid tasks, polling the same task and parsing the generated result.
+On-demand material generation, file downloads and final video assembly still
+belong to the ``material`` service, keeping the vendor protocol and the local
+video workflow decoupled.
 """
 
 from __future__ import annotations
@@ -42,30 +44,33 @@ SUPPORTED_RESOLUTIONS = frozenset({"768P", "2K"})
 
 
 class MetasoMiniMaxError(RuntimeError):
-    """秘塔 MiniMax 的确定性配置、请求或响应错误。"""
+    """Deterministic configuration, request or response error from Metaso MiniMax."""
 
     def __init__(self, message: str, task_id: str = ""):
         super().__init__(message)
-        # 远端任务一旦创建，所有后续异常都携带同一个 ID。任务服务可以统一
-        # 保存恢复线索，不需要了解轮询、结果解析或下载分别在哪一步失败。
+        # Once the remote task exists, every later exception carries the same
+        # ID. The task service can save the recovery hint in one place without
+        # knowing whether polling, result parsing or downloading failed.
         self.task_id = task_id
 
 
 class MetasoMiniMaxUnconfirmedTaskError(MetasoMiniMaxError):
-    """远端可能已创建付费任务，但本机无法确认其最终状态。"""
+    """A paid remote task may exist, but this host cannot confirm its final state."""
 
 
 class MetasoMiniMaxDownloadError(MetasoMiniMaxError):
-    """远端付费任务已成功，但成片未能下载到本机。"""
+    """The paid remote task succeeded, but the video was not downloaded."""
 
 
 def get_api_key(settings: Mapping[str, Any] | None = None) -> str:
     """
-    按固定优先级读取秘塔凭据。
+    Read the Metaso credential in a fixed priority order.
 
-    秘塔 ``mk-`` Key 与 MiniMax 官方 Key 属于不同账户体系，因此不能复用
-    项目已有的 ``minimax_api_key``。独立配置和独立环境变量也能防止用户在
-    切换 LLM Provider 时意外改变视频生成凭据。
+    Metaso ``mk-`` keys and official MiniMax keys belong to different account
+    systems, so the project's existing ``minimax_api_key`` cannot be reused.
+    Separate config and a separate environment variable also keep users from
+    accidentally changing video-generation credentials when switching LLM
+    providers.
     """
     settings = config.app if settings is None else settings
     configured = str(settings.get("metaso_minimax_api_key", "") or "").strip()
@@ -74,7 +79,7 @@ def get_api_key(settings: Mapping[str, Any] | None = None) -> str:
 
 
 def is_enabled(settings: Mapping[str, Any] | None = None) -> bool:
-    """返回当前配置是否具备调用秘塔视频接口的凭据。"""
+    """Return whether the current configuration holds a Metaso video credential."""
     return bool(get_api_key(settings))
 
 
@@ -100,8 +105,10 @@ def _resolution() -> str:
     value = str(configured).strip().upper()
     if value not in SUPPORTED_RESOLUTIONS:
         supported = ", ".join(sorted(SUPPORTED_RESOLUTIONS))
-        # 分辨率直接影响生成费用，用户显式写错时不能静默退回 2K。只有配置项
-        # 完全缺失时才使用默认值，避免无意间创建比预期更贵的任务。
+        # Resolution directly affects generation cost, so an explicit wrong
+        # value must not silently fall back to 2K. The default is used only when
+        # the config key is entirely absent, so no task costs more than expected
+        # by accident.
         raise MetasoMiniMaxError(
             f"Unsupported Metaso MiniMax resolution {value!r}; "
             f"expected one of: {supported}"
@@ -117,7 +124,7 @@ def _tls_verify() -> bool:
 
 
 def _bounded_float(key: str, default: float, minimum: float, maximum: float) -> float:
-    """读取有限浮点配置，并限制在不会压垮远端或本机的安全范围内。"""
+    """Read a finite float setting, clamped to a range safe for host and remote."""
     try:
         value = float(config.app.get(key, default))
     except (TypeError, ValueError):
@@ -135,7 +142,7 @@ def _status_code(response: Any) -> int:
 
 
 def _redact_secret(value: Any, api_key: str) -> str:
-    """保留可排障文本，同时移除 API Key、URL 编码 Key 和代理凭据。"""
+    """Keep text useful for debugging while removing API, URL-encoded and proxy keys."""
     text = str(value or "")
     if api_key:
         text = text.replace(api_key, "***")
@@ -150,7 +157,7 @@ def _redact_secret(value: Any, api_key: str) -> str:
 
 
 def _response_error(response: Any, api_key: str) -> str:
-    """兼容 MiniMax V2 的嵌套错误结构，并限制日志中的响应长度。"""
+    """Handle MiniMax V2's nested error shape and cap the response length logged."""
     try:
         payload = response.json()
     except Exception:
@@ -188,7 +195,7 @@ def _is_retryable_error(error: Exception) -> bool:
 
 
 def _normalize_duration(minimum_duration: int) -> tuple[int, int]:
-    """返回“用户请求时长、实际提交时长”，用于日志解释最短 4 秒约束。"""
+    """Return (requested duration, submitted duration) to log the 4s minimum."""
     try:
         requested = int(minimum_duration)
     except (TypeError, ValueError, OverflowError) as exc:
@@ -211,15 +218,16 @@ def generate_videos(
     minimum_duration: int,
     video_aspect: VideoAspect = VideoAspect.portrait,
 ) -> list[MaterialInfo]:
-    """提交一个秘塔 MiniMax H3 文生视频任务并等待可下载的结果。"""
+    """Submit one Metaso MiniMax H3 text-to-video task and wait for a result."""
     api_key = get_api_key()
     if not api_key:
         raise MetasoMiniMaxError("Metaso MiniMax requires an API key")
 
     term = str(search_term or "").strip()
     if not term:
-        # 空提示词通常表示上游脚本拆分失败。付费接口不能用无效输入试探，
-        # 否则即使远端接受也只会产生无法使用的计费素材。
+        # An empty prompt usually means upstream script splitting failed. A
+        # paid API must not be probed with invalid input; even if the remote
+        # accepts it, it only bills for unusable material.
         raise MetasoMiniMaxError("Metaso MiniMax search term must not be empty")
     if len(term) > MAX_PROMPT_LENGTH:
         raise MetasoMiniMaxError(
@@ -254,8 +262,10 @@ def generate_videos(
         f"prompt_length={len(term)}"
     )
 
-    # POST 超时或 5xx 发生时，远端可能已经创建并计费。接口没有提供客户端
-    # 幂等键，因此这里绝不自动重发；上层会停止后续关键词，避免重复扣费。
+    # On a POST timeout or 5xx the remote may already have created and billed
+    # the task. The API offers no client idempotency key, so this code never
+    # resends automatically; the caller stops further keywords to avoid double
+    # charges.
     generation_progress.submitting('metaso_minimax')
     try:
         response = trace_http_call(
@@ -339,8 +349,9 @@ def generate_videos(
                 "provider": "metaso_minimax",
                 "search_term": term,
                 "asset_id": task_id,
-                # MiniMax 的 2K/768P 是规格名称，接口没有承诺固定像素尺寸。
-                # 不猜测 width/height，后续若需要精确尺寸应以下载文件探测值为准。
+                # MiniMax's 2K/768P are spec names; the API promises no fixed
+                # pixel size. Do not guess width/height; if exact dimensions are
+                # needed later, probe the downloaded file instead.
                 "rendition": {"id": task_id},
             },
         )
@@ -354,7 +365,7 @@ def _wait_for_task(
     headers: dict[str, str],
     api_key: str,
 ) -> dict[str, Any]:
-    """轮询同一个付费任务，直到成功、明确失败或本地无法确认状态。"""
+    """Poll one paid task until it succeeds, fails clearly, or is unconfirmable."""
     deadline = time.monotonic() + _bounded_float(
         "metaso_minimax_run_timeout",
         DEFAULT_RUN_TIMEOUT_SECONDS,
@@ -380,8 +391,9 @@ def _wait_for_task(
                 task_id=task_id,
             )
 
-        # connect/read timeout 分别计时，均使用剩余时间的一半，保证一次 GET
-        # 不会有意越过任务总截止时间。到期后不会再发起下一次轮询。
+        # Connect and read timeouts are timed separately, each using half of
+        # the time remaining, so one GET cannot deliberately overrun the task's
+        # overall deadline. No further poll is issued after it expires.
         phase_timeout = max(min(remaining / 2.0, 30.0), 0.001)
         try:
             response = trace_http_call(

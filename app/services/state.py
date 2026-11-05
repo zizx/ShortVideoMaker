@@ -56,12 +56,12 @@ class BaseState(ABC):
 
     @abstractmethod
     def list_task_ids(self, scan_count: int = 100) -> list[str]:
-        """获取一次遍历中的任务 ID，供启动恢复等全量操作使用。"""
+        """Return task IDs from one traversal, for bulk work such as startup recovery."""
         pass
 
     @abstractmethod
     def patch_task(self, task_id: str, **kwargs) -> bool:
-        """只更新已有任务的指定字段；任务不存在时返回 False。"""
+        """Update only the given fields of an existing task; False if it is gone."""
         pass
 
 
@@ -115,9 +115,10 @@ class MemoryState(BaseState):
             return copy.deepcopy(task) if task is not None else None
 
     def patch_task(self, task_id: str, **kwargs) -> bool:
-        # 异步发布只应补充发布状态，不能覆盖已经保存的视频、字幕等结果。
-        # 在同一把锁内完成存在性判断和字段合并，也可避免任务删除后
-        # 被后台线程重建。
+        # Async publishing should only add publish status; it must not overwrite
+        # saved results such as video or subtitles. Doing the existence check and
+        # field merge under one lock also stops a background thread from
+        # recreating a task after it was deleted.
         with self._lock:
             task = self._tasks.get(task_id)
             if task is None:
@@ -150,9 +151,11 @@ class RedisState(BaseState):
     def get_all_tasks(self, page: int, page_size: int):
         start = (page - 1) * page_size
         end = start + page_size
-        # 每一页都以同一套确定性顺序切片，而不是依赖 SCAN 的返回顺序。
-        # 这仍不是并发增删任务时的事务快照；无索引时优先保证静态任务集
-        # 的分页正确性，并让 total 统计去重后的任务键。
+        # Every page is sliced from the same deterministic ordering rather than
+        # relying on SCAN's return order. This is still not a transactional
+        # snapshot under concurrent task additions and deletions; without an
+        # index, correctness for a static task set is preferred, and total
+        # counts the deduplicated task keys.
         task_ids = self.list_task_ids(scan_count=page_size)
         tasks = []
         for task_id in task_ids[start:end]:
@@ -166,9 +169,10 @@ class RedisState(BaseState):
         task_keys = set()
         cursor = 0
         while True:
-            # Redis 数据库中除了任务 Hash，还可能存在 RedisTaskManager 使用的
-            # List 队列。只扫描 Hash 可以避免对队列执行 HGETALL 时触发
-            # WRONGTYPE。COUNT 是扫描工作量提示，不保证每批返回的数量。
+            # Besides task hashes, the Redis database may hold List queues used
+            # by RedisTaskManager. Scanning only hashes avoids triggering
+            # WRONGTYPE when HGETALL runs against a queue. COUNT is a scan-effort
+            # hint and does not guarantee the number returned per batch.
             cursor, keys = self._redis.scan(
                 cursor,
                 count=scan_count,
@@ -194,7 +198,8 @@ class RedisState(BaseState):
                         task_keys.add(key)
             if cursor == 0:
                 break
-        # 按任务键排序不依赖 Hash 扫描顺序；不额外维护索引，也不改变旧任务。
+        # Sorting by task key does not depend on hash scan order; no extra index
+        # is maintained and old tasks are left untouched.
         return [key.decode("utf-8") for key in sorted(task_keys)]
 
     def update_task(
@@ -258,9 +263,11 @@ class RedisState(BaseState):
         for field, value in kwargs.items():
             arguments.extend((field, self._serialize_field(field, value)))
 
-        # EXISTS 和 HSET 如果分成两条命令，后台发布线程与删除请求并发时，
-        # HSET 可能在删除后重新创建一条残缺任务。Lua 脚本由 Redis 原子执行，
-        # 可以保证任务不存在时不写入，且不会改变现有字段之外的数据。
+        # If EXISTS and HSET were two separate commands, a background publish
+        # thread racing a delete request could have HSET recreate a partial task
+        # after the deletion. Redis runs the Lua script atomically, which
+        # guarantees nothing is written when the task is absent and no data
+        # outside the existing fields is changed.
         updated = self._redis.eval(
             _PATCH_EXISTING_TASK_SCRIPT,
             1,
@@ -270,8 +277,10 @@ class RedisState(BaseState):
         return bool(updated)
 
     def delete_task(self, task_id: str):
-        # 调用方读取任务后还会清理目录，同名键可能在这段时间被其它服务复用。
-        # 在一次 Lua 操作内检查类型、任务标记并删除，避免检查与删除之间的竞态。
+        # The caller also cleans up directories after reading a task, and in that
+        # window the same key may be reused by another service. Type, task marker
+        # and deletion are checked inside one Lua operation to avoid a race
+        # between the check and the delete.
         self._redis.eval(_DELETE_OWNED_TASK_SCRIPT, 1, task_id)
 
     @staticmethod

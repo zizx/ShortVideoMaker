@@ -1,4 +1,5 @@
-"""验证图片动态效果的兼容默认值、参数传递和真实渲染像素。"""
+"""Verify compatible defaults, parameter passing and real rendered pixels for
+image motion effects."""
 
 from pathlib import Path
 from unittest.mock import patch
@@ -154,14 +155,17 @@ def test_failed_motion_render_keeps_previous_output_and_removes_partial_file(tmp
 
 
 def _white_span(frame, dark=20):
-    # 以亚像素精度估算中间几行的白色宽度：按亮度比例累加，避免整数边界掩盖细微变化。
+    # Estimate the white width of the middle rows at sub-pixel precision by
+    # summing brightness ratios, so integer boundaries do not hide small changes.
     rows = frame.astype(float)[118:138].mean(axis=2)
     return ((rows - dark) / (255 - dark)).clip(0, 1).sum(axis=1).mean()
 
 
 def test_zoom_grows_smoothly_every_frame_without_integer_resize_jitter():
-    # 旧实现按整数尺寸逐帧缩放：慢速放大时约 3/4 的相邻帧尺寸不变，随后再跳 1px，
-    # 成片表现为抖动/顿挫。亚像素放大应让画面每一帧都以相近的幅度增长。
+    # The old implementation resized per frame at integer sizes: during slow zoom
+    # about 3/4 of adjacent frames kept the same size and then jumped 1px, which
+    # showed up as jitter/stutter in the final video. Sub-pixel zoom should make
+    # every frame grow by a similar amount.
     image = Image.new("RGB", (256, 256), (20, 20, 20))
     ImageDraw.Draw(image).rectangle((28, 28, 227, 227), fill="white")
     clip = video.ImageClip(np.asarray(image)).with_duration(3)

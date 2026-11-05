@@ -1,4 +1,4 @@
-"""覆盖付费提交幂等边界、模型参数、下载凭据隔离及素材按需生成。"""
+"""Cover paid-submit idempotency, model params, download auth isolation, and on-demand materials."""
 
 import subprocess
 import imageio_ffmpeg

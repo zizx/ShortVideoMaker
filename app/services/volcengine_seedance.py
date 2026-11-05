@@ -35,7 +35,8 @@ SUPPORTED_RESOLUTIONS = frozenset({"480p", "720p", "1080p"})
 
 @dataclass(frozen=True)
 class SeedanceEndpoint:
-    """同协议接入点的提交快照，避免不同供应商互相改写全局配置。"""
+    """Submission snapshot for an endpoint on the same protocol, so different
+    providers cannot overwrite each other's global config."""
 
     provider_id: str
     display_name: str
@@ -52,24 +53,25 @@ class SeedanceEndpoint:
 
 
 class VolcEngineSeedanceError(RuntimeError):
-    """确定性的配置、请求或响应错误。"""
+    """Deterministic configuration, request, or response error."""
 
     def __init__(self, message: str, task_id: str = ""):
         super().__init__(message)
-        # 只要远端任务已经创建，所有错误类型都统一携带任务 ID。上层无需
-        # 根据异常子类分别维护恢复逻辑，WebUI/API 也能稳定展示排障依据。
+        # Whenever a remote task has been created, every error type carries the
+        # task ID. Upper layers then need no per-subclass recovery logic, and
+        # the WebUI/API can reliably show the diagnostic basis.
         self.task_id = task_id
 
 
 class VolcEngineSeedanceUnconfirmedTaskError(VolcEngineSeedanceError):
-    """远端可能已创建付费任务，但本机无法确认其最终状态。"""
+    """A paid remote task may exist, but its final state cannot be confirmed."""
 
     def __init__(self, message: str, task_id: str = ""):
         super().__init__(message, task_id=task_id)
 
 
 class VolcEngineSeedanceDownloadError(VolcEngineSeedanceError):
-    """远端付费任务已成功，但生成的视频未能下载到本机。"""
+    """The paid remote task succeeded, but its video could not be downloaded."""
 
     def __init__(self, message: str, task_id: str):
         super().__init__(message, task_id=task_id)
@@ -77,11 +79,13 @@ class VolcEngineSeedanceDownloadError(VolcEngineSeedanceError):
 
 def get_api_key(settings: Mapping[str, Any] | None = None) -> str:
     """
-    按明确且唯一的优先级读取方舟凭据。
+    Read Ark credentials with an explicit and unambiguous priority.
 
-    Seedance 专用配置优先级最高；唯一支持的运行时环境变量是语义明确的
-    ``VOLCENGINE_ARK_API_KEY``。历史 ``volcengine_api_key`` 只作为共享配置
-    兜底，避免已经接入方舟大模型的用户升级后必须重复填写同一把 Key。
+    The Seedance-specific setting has highest priority; the only supported
+    runtime environment variable is the unambiguous
+    ``VOLCENGINE_ARK_API_KEY``. The legacy ``volcengine_api_key`` is only a
+    shared-config fallback, so users already using Ark large models do not have
+    to enter the same key again after upgrading.
     """
     settings = config.app if settings is None else settings
     configured = str(settings.get("volcengine_seedance_api_key", "") or "").strip()
@@ -112,9 +116,11 @@ def _resolution() -> str:
     configured = config.app.get("volcengine_seedance_resolution", DEFAULT_RESOLUTION)
     value = str(configured).strip().lower()
     if value not in SUPPORTED_RESOLUTIONS:
-        # 分辨率会直接影响付费任务的规格。无效值不能静默回退到最高默认
-        # 分辨率。配置项缺失时由 get 使用默认值；一旦用户显式写入空值、
-        # None、0 等非法值也必须报错，否则仍可能产生超出预期的费用。
+        # Resolution directly determines the paid task spec. An invalid value
+        # must not silently fall back to the highest default resolution. A
+        # missing setting uses the default via get; once a user explicitly sets
+        # an empty value, None, 0, or another invalid value, it must still
+        # raise, or costs may exceed expectations.
         supported = ", ".join(sorted(SUPPORTED_RESOLUTIONS))
         raise VolcEngineSeedanceError(
             f"Unsupported Seedance resolution {value!r}; expected one of: {supported}"
@@ -216,10 +222,12 @@ def _is_retryable_error(error: Exception) -> bool:
 
 
 def _rendition_size(aspect: VideoAspect, resolution: str) -> tuple[int, int]:
-    # 方舟的 480p 视频长边按编码对齐实际输出为 864，而不是数学换算得到的
-    # 854；720p 和 1080p 分别按官方比例输出 1280、1920。本机真实调用已
-    # 验证 480p 竖屏产物为 480x864。来源记录必须描述真实产物，否则后续
-    # 审计或素材诊断会看到与文件不一致的尺寸。
+    # Ark's 480p video long edge is actually output as 864 after codec
+    # alignment, not the mathematically converted 854; 720p and 1080p output
+    # 1280 and 1920 according to official ratios. A real local call verified
+    # the 480p portrait product is 480x864. Source records must describe the
+    # actual product, or later audits or material diagnostics would see
+    # dimensions inconsistent with the file.
     short_edge = {"480p": 480, "720p": 720, "1080p": 1080}[resolution]
     long_edge = {"480p": 864, "720p": 1280, "1080p": 1920}[resolution]
     if aspect == VideoAspect.portrait:
@@ -236,7 +244,7 @@ def generate_videos(
     *,
     endpoint: SeedanceEndpoint | None = None,
 ) -> list[MaterialInfo]:
-    """提交一个 Seedance 文生视频任务；默认仍采用原有方舟配置。"""
+    """Submit a Seedance text-to-video task; the existing Ark config is the default."""
     api_key = endpoint.api_key if endpoint else get_api_key()
     provider_id = endpoint.provider_id if endpoint else "volcengine_seedance"
     display_name = endpoint.display_name if endpoint else "Volcano Engine Seedance"
@@ -249,8 +257,9 @@ def generate_videos(
 
     term = str(search_term or "").strip()
     if not term:
-        # 空提示词可能来自上游脚本拆分异常。付费生成源不能把它提交到远端，
-        # 否则即使接口接受请求，也只会得到无法使用且已经计费的视频。
+        # An empty prompt may come from an upstream script-splitting failure.
+        # A paid generation source must not submit it: even if the API accepts
+        # the request, the result would be an unusable and already billed video.
         raise VolcEngineSeedanceError("Seedance search term must not be empty")
 
     aspect = VideoAspect(video_aspect)
@@ -265,9 +274,12 @@ def generate_videos(
     )
     duration = min(max(requested_duration, minimum), maximum)
     if duration != requested_duration:
-        # 生成比请求更长不会影响成片：剪辑流程仍按片段时长裁剪；生成比请求
-        # 更短只发生在请求超过模型上限时，此时也只能收敛到上限。其它付费视频源
-        # 都会说明这次收敛，否则用户无法解释成片片段为何比配置值短。
+        # Generating longer than requested does not affect the final video: the
+        # editing flow still trims to the clip duration. Generating shorter
+        # happens only when the request exceeds the model limit, which must
+        # also clamp to that limit. Other paid video sources explain this
+        # clamp, otherwise users cannot explain why a final clip is shorter
+        # than the configured value.
         logger.info(
             "Seedance clip duration clamped to the configured model range: "
             f"requested={requested_duration}s, using={duration}s "
@@ -284,7 +296,9 @@ def generate_videos(
         if endpoint else _config_bool("volcengine_seedance_watermark", False),
     }
     if endpoint:
-        # 新接入点明确关闭素材原声；成片仍由项目自己的配音与配乐流程处理。
+        # The new endpoint explicitly disables source audio from materials;
+        # the final video still uses the project's own voiceover and music
+        # pipeline.
         payload["generate_audio"] = endpoint.generate_audio
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -299,8 +313,10 @@ def generate_videos(
         f"model={payload['model']}, term={term!r}, duration={duration}s"
     )
 
-    # 提交接口不做自动重试：超时或 5xx 可能发生在付费任务已经创建之后，
-    # 盲目重试会造成重复扣费。只有拿到明确拒绝响应时才判定为确定性失败。
+    # The submission endpoint is not retried automatically: a timeout or 5xx
+    # may occur after a paid task has been created, and blind retries would
+    # bill twice. Treat the failure as deterministic only after an explicit
+    # rejection response.
     generation_progress.submitting(provider_id)
     try:
         response = trace_http_call(
@@ -426,9 +442,11 @@ def _wait_for_task(
                 task_id=task_id,
             )
 
-        # requests 的 connect/read timeout 分别计时，因此各使用剩余总时间的
-        # 一半。即使连接和读取都走到上限，单轮请求也不会有意超过总截止时间；
-        # 网络库仍可能有极小调度误差，下一处 deadline 检查会阻止再次重试。
+        # requests times connect/read timeouts separately, so each gets half of
+        # the remaining total. Even if both hit their limits, one request round
+        # will not intentionally exceed the overall deadline; the next deadline
+        # check stops further retries despite minor network-library scheduling
+        # variance.
         phase_timeout = max(min(remaining / 2.0, 30.0), 0.001)
         try:
             response = trace_http_call(

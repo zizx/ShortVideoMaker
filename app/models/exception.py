@@ -18,9 +18,10 @@ class HttpException(Exception):
         else:
             msg = f"HttpException: {status_code}, {task_id}, {message}\n{tb_str}"
 
-        # 400/401 都是可预期的客户端输入问题。尤其鉴权开启后，公网扫描可能
-        # 产生大量无效 Key；使用 WARNING 既保留定位信息，也避免污染 ERROR
-        # 告警。服务端配置错误和其它异常仍保持 ERROR。
+        # 400/401 are expected client-input problems. With auth enabled in
+        # particular, internet scans can produce many invalid keys; WARNING keeps
+        # the details for diagnosis without polluting ERROR alerts. Server
+        # misconfiguration and other errors still log at ERROR.
         if status_code in (400, 401):
             logger.warning(msg)
         else:

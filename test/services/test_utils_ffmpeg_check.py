@@ -15,7 +15,7 @@ from app.utils import utils
 
 
 class TestCheckFfmpegReady(unittest.TestCase):
-    """覆盖 utils.check_ffmpeg_ready() 的四种探测结果。"""
+    """Cover the four probe outcomes of utils.check_ffmpeg_ready()."""
 
     def test_returns_true_when_ffmpeg_probe_succeeds(self):
         completed = subprocess.CompletedProcess(args=["ffmpeg", "-version"], returncode=0)
@@ -98,10 +98,11 @@ class TestGetFfmpegBinaryEnvExpansion(unittest.TestCase):
             )
 
     def test_normalizes_home_path_in_os_environ(self):
-        """get_ffmpeg_binary() 必须把展开后的路径写回环境变量。
+        """get_ffmpeg_binary() must write the expanded path back to the environment.
 
-        MoviePy/imageio 直接读取 os.environ["IMAGEIO_FFMPEG_EXE"]，
-        只展开返回值会让预检通过而 MoviePy 编码仍然失败（issue #1662）。
+        MoviePy/imageio reads os.environ["IMAGEIO_FFMPEG_EXE"] directly, so
+        expanding only the return value would pass the precheck while MoviePy
+        encoding still fails (issue #1662).
         """
         home = tempfile.mkdtemp(prefix="ffmpeg-home-")
         try:
@@ -136,13 +137,14 @@ class TestGetFfmpegBinaryEnvExpansion(unittest.TestCase):
     shutil.which("ffmpeg"), "需要系统里存在真实 ffmpeg 才能做编码回归"
 )
 class TestMoviePyEncodeWithExpandedEnv(unittest.TestCase):
-    """issue #1662 回归：MoviePy 实际编码链路。
+    """issue #1662 regression: the actual MoviePy encoding path.
 
-    MoviePy 2.x 在 import 时通过 imageio 一次性解析 ffmpeg 路径并缓存为
-    moviepy.config.FFMPEG_BINARY，测试进程里早已导入 moviepy，因此直接
-    在本进程写视频无法复现问题。这里用子进程按真实启动顺序执行：先加载
-    app.config（负责规范化 IMAGEIO_FFMPEG_EXE），再导入 moviepy 编码。
-    "~"、环境变量、绝对路径三种写法都必须产出真实视频文件。
+    MoviePy 2.x resolves the ffmpeg path once through imageio at import time and
+    caches it as moviepy.config.FFMPEG_BINARY. The test process already imports
+    moviepy, so writing a video in-process cannot reproduce the issue. Use a
+    subprocess in the real startup order: load app.config (which normalizes
+    IMAGEIO_FFMPEG_EXE), then import moviepy and encode. "~", environment
+    variable, and absolute path forms must all produce a real video file.
     """
 
     PROJECT_ROOT = str(Path(__file__).parent.parent.parent)

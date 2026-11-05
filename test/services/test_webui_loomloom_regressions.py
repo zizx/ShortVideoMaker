@@ -1,4 +1,4 @@
-"""胜算云吸收优化的回归：隔离状态、准确试听时长和既有文案路由。"""
+"""Shengsuan Cloud integration regressions: isolated state, preview timing, script routing."""
 
 import ast
 import hashlib
@@ -19,7 +19,7 @@ MAIN = Path(__file__).parents[2] / "webui" / "Main.py"
 
 
 def helpers(state):
-    """只执行待测 helper，避免为了验证缓存语义启动整页或访问外部服务。"""
+    """Run only the tested helpers, avoiding a full page or external services for cache checks."""
     names = {
         "_loomloom_video_account_signature",
         "_load_loomloom_video_capability",
@@ -72,7 +72,8 @@ def test_capability_cache_isolated_by_endpoint_and_key_and_recovers():
         )
         assert load("key-a", force=True) == capability
         assert state["loomloom_video_capability_error"] == "offline"
-        # 换 Key/端点后失败必须清空旧目录，不能把其他账户的目录误认为有效。
+        # A failure after changing Key/endpoint must clear the old capability, not
+        # accept another account's catalog as valid.
         assert load("key-b") is None
         backend.resolve_video_capability.side_effect = None
         assert load("key-b", force=True) == capability
@@ -148,7 +149,8 @@ def test_batch_script_and_video_use_settings_key_without_local_llm():
         app.run()
         fields = [x for x in app.text_input if x.key == "loomloom_user_api_token"]
         assert len(fields) == 0
-        # 设置是唯一凭据入口；配置更新后两个功能都读取最新快照。
+        # Settings are the only credential entry; both features read the latest
+        # snapshot after config updates.
         values["loomloom_api_token"] = "test-key"
         app.run()
         assert not app.exception
@@ -164,7 +166,7 @@ def widget(items, key):
 
 @pytest.fixture
 def quote_page():
-    """用真实 Streamlit 控件运行失败路径，模拟网络且禁止写配置和提交任务。"""
+    """Run failure paths with real Streamlit widgets, mocking network and blocking writes/tasks."""
     values = dict(
         config.app,
         video_source="loomloom",
@@ -284,14 +286,15 @@ def test_missing_key_clears_error_and_never_retries(quote_page):
 
 @pytest.mark.parametrize("change", ["script", "source"])
 def test_unrelated_edits_do_not_retry_failed_quote(quote_page, change):
-    """文案正文不改变已有主题/关键词报价；切到其它来源也不能触发胜算云请求。"""
+    """Script text must not change subject/keyword quotes; source changes must not use Shengsuan."""
     app, _, quote, _ = quote_page
     quote.side_effect = loomloom.LoomLoomAPIError("offline")
     app.run()
     if change == "script":
         widget(app.text_area, "video_script").set_value("A different narration.").run()
     else:
-        # 来源使用自定义分组控件，AppTest 无 selectbox 适配器；模拟其回传状态。
+        # Source uses a custom grouped widget and AppTest has no selectbox
+        # adapter; simulate the state it returns.
         app.session_state["video_source_select_en"] = "pexels"
         app.run()
         app.run()
@@ -373,6 +376,7 @@ def test_batch_candidate_autofill_once_preserves_manual_count(script):
 def test_reference_price_copy_does_not_promise_quote_is_final():
     for locale in ("zh", "en"):
         messages = json.loads((MAIN.parent / "i18n" / f"{locale}.json").read_text())
-        # 价格仅作选择参考，避免与“不完整估算仍可能扣费”的警告矛盾。
+        # Price is a selection reference only, avoiding conflict with the warning
+        # that an incomplete estimate may still incur charges.
         text = messages["Translation"]["AI Video Model Reference Price"]
         assert ("实际模型调用" if locale == "zh" else "actual model usage") in text

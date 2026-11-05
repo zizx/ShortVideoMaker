@@ -1,4 +1,4 @@
-"""验证 OFox 展示顺序调整，不改变已保存的生成配置或触发付费请求。"""
+"""Verify the OFox order change keeps saved generation config and triggers no paid calls."""
 
 import ast
 import json
@@ -15,7 +15,8 @@ WEBUI = Path(__file__).resolve().parents[2] / "webui" / "Main.py"
 
 
 def test_ai_video_source_order_keeps_ofox_below_metaso():
-    # 常量控制视频来源选择器，设置弹窗则通过下面的真实控件测试验证。
+    # The constant drives the video-source selector; the settings dialog is
+    # verified by the real widget tests below.
     tree = ast.parse(WEBUI.read_text(encoding="utf-8"))
     assignment = next(
         node for node in tree.body
@@ -32,7 +33,8 @@ def test_ai_video_source_order_keeps_ofox_below_metaso():
 
 @pytest.mark.parametrize("language", sorted(file.stem for file in (WEBUI.parent / "i18n").glob("*.json")))
 def test_ofox_settings_order_and_saved_values(language):
-    # 使用虚构配置并禁止保存，打开设置不得覆盖本机凭据或改写既有 OFox 选择。
+    # Use fake config with saving disabled: opening settings must not overwrite
+    # local credentials or rewrite an existing OFox selection.
     values = {
         "llm_provider": "openai",
         "ofox_api_key": "review-only-fake-key",
@@ -68,7 +70,8 @@ def test_ofox_settings_order_and_saved_values(language):
         api_key_input = next(item for item in app.text_input if item.key == "ofox_api_key_input")
         assert "https://ofox.ai/?utm_source=github&utm_medium=sponsorship&utm_content=moneyprinterturbo" in api_key_input.label
         assert any(item.value == "**OfoxAI**" for item in app.markdown)
-        # 每种语言均实际渲染，仅品牌名保留推广链接，官方上游说明使用普通文字。
+        # Every language is actually rendered; only the brand name keeps the
+        # promo link, while the official upstream note uses plain text.
         messages = json.loads((WEBUI.parent / "i18n" / f"{language}.json").read_text(encoding="utf-8"))
         help_text = messages["Translation"]["OFox AI Video Help"]
         assert "http" not in help_text
